@@ -1,0 +1,362 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""A module that implements the BasicOptimizer class, a base class for
+optimizers.
+"""
+
+from abc import abstractmethod, ABCMeta
+
+import numpy
+import theano
+import theano.tensor as tensor
+
+from theanolm.backend import IncompatibleStateError
+from theanolm.backend import test_value
+
+class BasicOptimizer(object, metaclass=ABCMeta):
+    """Superclass for Neural Network Language Model Optimizers
+    """
+
+    def __init__(self, optimization_options, network, cost_function,
+                 profile=False):
+        """Creates Theano functions for training a neural network language
+        model.
+
+        The subclass constructor is expected to create the optimizer parameters
+        in ``self._params``. This constructor will then create a function
+        ``self.update_function``, which updates the optimizer parameters, and
+        then the model state given the gradients, the optimizer parameters, and the
+        learning rate.
+
+        The update functions takes as arguments four matrices and the alpha
+        hyperparameter:
+
+        1. Word IDs in the shape of a mini-batch. The functions will slice this
+           into input and output.
+        2. Class IDs in the shape of a mini-batch. The functions will slice this
+           into input and output.
+        3. Mask in the shape of a mini-batch, but only for the output words (not
+           for the first time step).
+        4. Weights in the shape of a mini-batch, but only for the output words
+           (not for the first time step).
+        4. Alpha or learning rate is used to scale the size of the update.
+
+        :type optimization_options: dict
+        :param optimization_options: a dictionary of optimization options
+
+        :type network: Network
+        :param network: the neural network object
+
+        :type cost_function: Cost
+        :param cost_function: an object from one of the cost function classes
+                              that defined the training objective
+
+        :type profile: bool
+        :param profile: if set to True, creates a Theano profile object
+        """
+
+        self.network = network
+
+        float_type = numpy.dtype(theano.config.floatX).type
+        self.float_type = float_type
+
+        try:
+            # numerical stability / smoothing term to prevent divide-by-zero
+            self._epsilon = float_type(optimization_options['epsilon'])
+            # learning rate / step size
+            self.learning_rate = float_type(optimization_options['learning_rate'])
+            # weights for training files
+            self._weights = optimization_options['weights']
+            # maximum norm for parameter updates
+            self._max_gradient_norm = float_type(
+                optimization_options['max_gradient_norm'])
+            # number of noise samples for sampling based output
+            num_noise_samples = optimization_options['num_noise_samples']
+            # noise sample sharing for sampling based output
+            noise_sharing = optimization_options['noise_sharing']
+        except KeyError as e:
+            raise ValueError("Option {} is missing from optimization options."
+                             .format(e))
+
+        self._unk_id = self.network.vocabulary.word_to_id['<unk>']
+
+        # The function takes as inputs a mini-batch of word IDs and class IDs,
+        # and slices the input and target IDs for the network.
+        batch_word_ids = tensor.matrix('optimizer/batch_word_ids',
+                                       dtype='int64')
+        batch_word_ids.tag.test_value = test_value(
+            size=(101, 16), high=self.network.vocabulary.num_shortlist_words())
+        batch_class_ids = tensor.matrix('optimizer/batch_class_ids',
+                                        dtype='int64')
+        batch_class_ids.tag.test_value = test_value(
+            size=(101, 16), high=self.network.vocabulary.num_classes())
+
+        # Derive the symbolic expression for updating the gradient with regard
+        # to each parameter.
+        cost, num_words = cost_function.get_tensor()
+        self._gradients = \
+            tensor.grad(cost, wrt=list(self.network.get_variables().values()))
+
+        # The function takes as input the learning rate.
+        alpha = tensor.scalar('optimizer/alpha',
+                              dtype=theano.config.floatX)
+        alpha.tag.test_value = 0.1
+
+        # The function takes as input a matrix of weights, one for each
+        # target word. These are used to scale the parameter updates.
+        weights = tensor.matrix('optimizer/weights',
+                                dtype=theano.config.floatX)
+        weights.tag.test_value = test_value(size=(100, 16), high=1.0)
+        word_positions = tensor.eq(self.network.mask, 1).nonzero()
+        weight = weights[word_positions].sum()
+        num_words_float = tensor.cast(num_words, theano.config.floatX)
+        modified_alpha = tensor.switch(tensor.gt(num_words, 0),
+                                       alpha * weight / num_words_float,
+                                       alpha)
+
+        # Ignore unused input, because is_training is only used by dropout
+        # layer.
+        self.update_function = theano.function(
+            [batch_word_ids, batch_class_ids, self.network.mask, weights,
+             alpha],
+            [cost, num_words],
+            givens=[(network.input_word_ids, batch_word_ids[:-1]),
+                    (network.input_class_ids, batch_class_ids[:-1]),
+                    (network.target_word_ids, batch_word_ids[1:]),
+                    (network.target_class_ids, batch_class_ids[1:]),
+                    (self.network.is_training, numpy.int8(1)),
+                    (self.network.num_noise_samples,
+                     numpy.int64(num_noise_samples))],
+            updates=self._get_param_updates(alpha),
+            name='update_function',
+            on_unused_input='ignore',
+            profile=profile)
+
+    def get_state(self, state):
+        """Pulls parameter values from Theano shared variables.
+
+        If there already is a parameter in the state, it will be replaced, so it
+        has to have the same number of elements.
+
+        :type state: h5py.File
+        :param state: HDF5 file for storing the optimization parameters
+        """
+
+        h5_optimizer = state.require_group('optimizer')
+        h5_optimizer.attrs['learning_rate'] = self.learning_rate
+
+        self._params.get_state(state)
+
+    def set_state(self, state):
+        """Sets the values of Theano shared variables.
+
+        Requires that ``state`` contains values for all the optimization
+        parameters.
+
+        :type state: h5py.File
+        :param state: HDF5 file that contains the optimization parameters
+        """
+
+        if 'optimizer' not in state:
+            raise IncompatibleStateError("Optimizer state is missing.")
+        h5_optimizer = state['optimizer']
+
+        if 'learning_rate' not in h5_optimizer.attrs:
+            raise IncompatibleStateError("Learning rate is missing from "
+                                         "optimizer state.")
+        self.learning_rate = h5_optimizer.attrs['learning_rate']
+
+        self._params.set_state(state)
+
+    def update_minibatch(self, word_ids, class_ids, file_ids, mask):
+        """Optimizes the neural network parameters using the given inputs and
+        learning rate.
+
+        :type word_ids: ndarray of ints
+        :param word_ids: a 2-dimensional matrix, indexed by time step and
+                         sequence, that contains the word IDs
+
+        :type class_ids: ndarray of ints
+        :param class_ids: a 2-dimensional matrix, indexed by time step and
+                          sequence, that contains the class IDs
+
+        :type file_ids: ndarray of ints
+        :param file_ids: a 2-dimensional matrix, indexed by time step and
+                         sequence, that identifies the file in case of multiple
+                         training files
+
+        :type mask: numpy.ndarray of a floating point type
+        :param mask: a 2-dimensional matrix, indexed by time step and sequence,
+                     that masks out elements past the sequence ends.
+        """
+
+        # We should predict probabilities of the words at the following time
+        # step.
+        mask = mask[1:]
+        file_ids = file_ids[1:]
+        weights = self._weights[file_ids]
+        alpha = self.learning_rate
+        self.update_function(word_ids, class_ids, mask, weights, alpha)
+
+    def _get_nce_cost(self, sharing):
+        """Returns a tensor variable that represents the mini-batch cost as
+        defined by noise-contrastive estimation.
+
+        M. U. Gutmann (2012)
+        Noise-Contrastive Estimation of Unnormalized Statistical Models, with
+        Applications to Natural Image Statistics
+        http://www.jmlr.org/papers/v13/gutmann12a.html
+
+        :type sharing: str
+        :param sharing: either ``None`` for k samples per mini-batch element,
+                        'seq' for k samples per time step, or 'batch' for k
+                        samples in total
+
+        :rtype: Variable
+        :returns: a symbolic 2-dimensional matrix that contains the log
+                  probability of each time step of each sequence
+        """
+
+        target_logprobs = self.network.unnormalized_logprobs()
+        target_class_ids = self.network.target_class_ids
+        if self.network.noise_probs is None:
+            word_prob = 1.0 / self.network.vocabulary.num_classes()
+            word_logprob = numpy.log(word_prob)
+            word_logprob = self.float_type(word_logprob)
+            target_prior_logprobs = word_logprob
+            # target_prior_logprobs will be broadcasted to the mini-batch shape,
+            # when subtracted from target_logprobs.
+        else:
+            noise_probs = self.network.noise_probs[target_class_ids]
+            target_prior_logprobs = tensor.log(noise_probs + self._epsilon)
+        # In the article, h = 1 / (1 + e^-G). log(h) can be expressed using the
+        # softplus function: log(h) = -log(1 + e^-G) = -softplus(-G)
+        G = target_logprobs - target_prior_logprobs
+        target_log_h = -tensor.nnet.softplus(-G)
+
+        if sharing is None:
+            sample, sample_logprobs = self.network.noise_sample(sharing)
+        elif sharing == 'seq':
+            sample, sample_logprobs = self.network.noise_sample(sharing)
+            sample = sample[:, None, :]
+        elif sharing == 'batch':
+            sample, sample_logprobs = self.network.noise_sample(sharing)
+            # sample_prior_logprobs will be a one-dimensional array (or a scalar
+            # in case of uniform noise), but it will be broadcasted when
+            # subtracted from sample_logprobs.
+        else:
+            raise ValueError("Unknown noise sample sharing: `{}'"
+                             .format(sharing))
+        if self.network.noise_probs is None:
+            sample_prior_logprobs = word_logprob
+        else:
+            noise_probs = self.network.noise_probs[sample]
+            sample_prior_logprobs = tensor.log(noise_probs + self._epsilon)
+        # log(1 - h) = log(1 - e^G / (e^G + 1))
+        #            = log((e^G + 1 - e^G) / (e^G + 1))
+        #            = log(1) - log(e^G + 1)
+        #            = -softplus(G)
+        G = sample_logprobs - sample_prior_logprobs
+        sample_log_one_minus_h = -tensor.nnet.softplus(G)
+        return target_log_h + sample_log_one_minus_h.sum(2)
+
+    def _get_blackout_cost(self, sharing):
+        """Returns a tensor variable that represents the mini-batch cost as
+        defined by BlackOut.
+
+        S. Ji (2016)
+        BlackOut: Speeding up Recurrent Neural Network Language Models With Very
+        Large Vocabularies
+        https://arxiv.org/abs/1511.06909
+
+        :type sharing: str
+        :param sharing: either ``None`` for k samples per mini-batch element,
+                        'seq' for k samples per time step, or 'batch' for k
+                        samples in total
+
+        :rtype: Variable
+        :returns: a symbolic 2-dimensional matrix that contains the log
+                  probability of each time step of each sequence
+        """
+
+        target_logprobs = self.network.unnormalized_logprobs()
+        target_probs = tensor.exp(target_logprobs)
+        target_class_ids = self.network.target_class_ids
+        if self.network.noise_probs is None:
+            word_prob = 1.0 / self.network.vocabulary.num_classes()
+            target_prior_probs = word_prob
+            # target_prior_probs will be broadcasted to the mini-batch shape,
+            # when it is used to divide target_probs.
+        else:
+            target_prior_probs = \
+                self.network.noise_probs[target_class_ids]
+        target_weighted_probs = target_probs / target_prior_probs
+
+        if sharing is None:
+            sample, sample_logprobs = self.network.noise_sample(sharing)
+        elif sharing == 'seq':
+            sample, sample_logprobs = self.network.noise_sample(sharing)
+            sample = sample[:, None, :]
+        elif sharing == 'batch':
+            sample, sample_logprobs = self.network.noise_sample(sharing)
+            # sample_prior_probs will be a one-dimensional array (or a scalar in
+            # case of uniform noise), but it will be broadcasted when used to
+            # divide sample_probs.
+        else:
+            raise ValueError("Unknown noise sample sharing: `{}'"
+                             .format(sharing))
+        sample_probs = tensor.exp(sample_logprobs)
+        if self.network.noise_probs is None:
+            sample_prior_probs = word_prob
+        else:
+            sample_prior_probs = self.network.noise_probs[sample]
+        sample_weighted_probs = sample_probs / sample_prior_probs
+
+        denominators = target_weighted_probs + \
+                       sample_weighted_probs.sum(2)
+        target_costs = target_weighted_probs / denominators
+        sample_costs = sample_weighted_probs / denominators[:, :, None]
+        sample_costs = 1.0 - sample_costs
+        result = tensor.log(target_costs + self._epsilon)
+        result += tensor.log(sample_costs + self._epsilon).sum(2)
+        return result
+
+    @abstractmethod
+    def _get_param_updates(self, alpha):
+        """Returns Theano expressions for updating the model parameters and any
+        additional parameters required by the optimizer. Implemented by every
+        optimizer subclass.
+
+        :type alpha: Variable
+        :param alpha: a scale to be applied to the model parameter updates
+
+        :rtype: iterable over pairs (shared variable, new expression)
+        :returns: expressions how to update the optimizer parameters
+        """
+
+        assert False
+
+    def _normalize(self, updates):
+        """Normalizes the norm of a parameter update to given maximum value.
+
+        :type updates: dict of str to Variable
+        :param updates: dictionary of symbolic variables that describe the
+                        negative gradient of each parameter, after any
+                        optimization method specific adaptation
+
+        :rtype: dict of str to Variable
+        :returns: dictionary of symbolic variables that describe ``updates``
+                  after normalization has been applied
+        """
+
+        max_norm = self._max_gradient_norm
+        if max_norm is None:
+            return
+
+        squares = [tensor.sqr(update) for update in updates.values()]
+        sums = [tensor.sum(square) for square in squares]
+        total_sum = sum(sums)  # sum over parameter variables
+        norm = tensor.sqrt(total_sum)
+        target_norm = tensor.clip(norm, 0.0, max_norm)
+        for name, update in updates.items():
+            updates[name] = update * target_norm / (self._epsilon + norm)
