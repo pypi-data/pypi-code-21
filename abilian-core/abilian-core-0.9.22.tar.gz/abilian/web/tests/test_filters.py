@@ -1,0 +1,184 @@
+# coding=utf-8
+from __future__ import absolute_import, division, print_function, \
+    unicode_literals
+
+import datetime
+
+import html5lib
+import mock
+from flask import Flask
+from flask_babel import Babel
+from flask_testing import TestCase as FlaskTestCase
+from jinja2 import Environment
+from pytz import timezone, utc
+
+from .. import filters
+
+env = Environment()
+filters.init_filters(env)
+
+
+def en_locale():
+    return 'en'
+
+
+def user_tz():
+    # This one is GMT+8 and has no DST (tests should pass any time in year)
+    return 'Asia/Hong_Kong'
+
+
+USER_TZ = timezone(user_tz())
+
+
+class TestFilters(FlaskTestCase):
+
+    def create_app(self):
+        app = Flask(__name__)
+        babel = Babel(app, default_locale='fr', default_timezone=USER_TZ)
+        babel.localeselector(en_locale)
+        babel.timezoneselector(user_tz)
+        return app
+
+    def test_labelize(self):
+        labelize = filters.labelize
+        self.assertEqual('Test Case', labelize('test_case'))
+
+    def test_filesize(self):
+        filesize = filters.filesize
+        self.assertEqual("100&nbsp;B", str(filesize('100')))
+        self.assertEqual("100&nbsp;B", str(filesize(100)))
+        self.assertEqual("1.0&nbsp;kB", str(filesize(1000)))
+        self.assertEqual("1.1&nbsp;kB", str(filesize(1100)))
+        self.assertEqual("10&nbsp;kB", str(filesize(10000)))
+        self.assertEqual("1.1&nbsp;MB", str(filesize(1100100)))
+        self.assertEqual("10&nbsp;MB", str(filesize(10000000)))
+        self.assertEqual("1.1&nbsp;GB", str(filesize(1100100000)))
+        self.assertEqual("100&nbsp;GB", str(filesize(100000000000)))
+
+    def test_roughsize(self):
+        roughsize = filters.roughsize
+        self.assertEqual('6', roughsize(6))
+        self.assertEqual('15', roughsize(15))
+        self.assertEqual('130+', roughsize(134))
+        self.assertEqual('10+', roughsize(15, above=10))
+        self.assertEqual('55+', roughsize(57, mod=5))
+
+    def test_date_age(self):
+        date_age = filters.date_age
+        now = datetime.datetime(2012, 6, 10, 10, 10, 10, tzinfo=utc)
+
+        self.assertEqual("", date_age(None))
+        dt = datetime.datetime(2012, 6, 10, 10, 10, 0, tzinfo=utc)
+        self.assertEqual("2012-06-10 18:10 (1 minute ago)", date_age(dt, now))
+
+        dt = datetime.datetime(2012, 6, 10, 10, 8, 10, tzinfo=utc)
+        self.assertEqual("2012-06-10 18:08 (2 minutes ago)", date_age(dt, now))
+
+        dt = datetime.datetime(2012, 6, 10, 8, 30, 10, tzinfo=utc)
+        self.assertEqual("2012-06-10 16:30 (2 hours ago)", date_age(dt, now))
+
+        # for coverage: test when using default parameter now=None
+        dt_patcher = mock.patch.object(
+            filters.datetime,
+            'datetime',
+            mock.Mock(wraps=datetime.datetime),
+        )
+        with dt_patcher as mocked:
+            mocked.utcnow.return_value = now
+            self.assertEqual("2012-06-10 16:30 (2 hours ago)", date_age(dt))
+
+    def test_age(self):
+        age = filters.age
+        now = datetime.datetime(2012, 6, 10, 10, 10, 10, tzinfo=utc)
+        d1m = datetime.datetime(2012, 6, 10, 10, 10, 0, tzinfo=utc)
+        d3w = datetime.datetime(2012, 5, 18, 8, 0, 0, tzinfo=utc)
+        d2011 = datetime.datetime(2011, 9, 4, 12, 12, 0, tzinfo=utc)
+
+        # default parameters
+        assert age(None) == ''
+        assert age(d1m, now) == '1 minute ago'
+        assert age(d3w, now) == '3 weeks ago'
+
+        # with direction
+        assert age(d1m, now, add_direction=False) == '1 minute'
+        assert age(d3w, now, add_direction=False) == '3 weeks'
+
+        # with date_threshold
+        assert age(d1m, now, date_threshold='day') == '1 minute ago'
+        # same year: 2012 not shown
+        assert age(d3w, now, date_threshold='day') == 'May 18, 4:00 PM'
+        # different year: 2011 shown
+        assert (
+            age(
+                d2011,
+                now,
+                date_threshold='day',
+            ) == 'September 4, 2011, 8:12 PM'
+        )
+
+        # using default parameter now=None
+        dt_patcher = mock.patch.object(
+            filters.datetime,
+            'datetime',
+            mock.Mock(wraps=datetime.datetime),
+        )
+        with dt_patcher as mocked:
+            mocked.utcnow.return_value = now
+            assert age(d1m) == '1 minute ago'
+
+    def test_abbrev(self):
+        abbrev = filters.abbrev
+        self.assertEqual('test', abbrev('test', 20))
+        self.assertEqual(
+            'Longer test...e truncated',
+            abbrev('Longer test. it should be truncated', 25),
+        )
+
+    def test_linkify(self):
+        tmpl = env.from_string('{{ "http://test.example.com"|linkify}}')
+        rendered = tmpl.render()
+        el = html5lib.parseFragment(rendered)
+        self.assertEqual(len(el.getchildren()), 1)
+        el = el.getchildren()[0]
+        self.assertEqual(el.tag, '{http://www.w3.org/1999/xhtml}a')
+        self.assertEqual(el.text, 'http://test.example.com')
+        self.assertEqual(
+            sorted(el.items()),
+            [
+                ('href', 'http://test.example.com'),
+                ('rel', 'nofollow'),
+            ],
+        )
+
+    def test_nl2br(self):
+        tmpl = env.from_string(
+            '{{ "first line\nsecond line\n\n  third, indented" | nl2br }}',
+        )
+        self.assertEqual(
+            tmpl.render(),
+            'first line<br />\nsecond line<br />\n<br />\n  third, indented',
+        )
+
+    def test_paragraphs(self):
+        tmpl = env.from_string('''{{ "First paragraph
+    some text
+    with line return
+
+    Second paragraph
+    ... lorem
+
+    Last one - a single line" | paragraphs }}
+    ''')
+
+        self.assertEqual(
+            tmpl.render(),
+            '''<p>First paragraph<br />
+    some text<br />
+    with line return</p>
+
+<p>Second paragraph<br />
+    ... lorem</p>
+
+<p>Last one - a single line</p>
+    ''',
+        )
