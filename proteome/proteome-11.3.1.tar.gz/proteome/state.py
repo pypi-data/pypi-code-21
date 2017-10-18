@@ -1,0 +1,31 @@
+from ribosome.machine.state import RootMachine
+from ribosome.nvim import HasNvim
+from ribosome.machine.modular import ModularMachine
+from ribosome.machine.transitions import Transitions
+from ribosome.machine.base import MachineBase
+from ribosome.nvim import NvimFacade
+
+from proteome.logging import Logging
+
+
+class ProteomeComponent(ModularMachine, HasNvim, Logging):
+
+    def __init__(self, vim: NvimFacade, parent=None, title=None) -> None:
+        MachineBase.__init__(self, parent, title=title)
+        HasNvim.__init__(self, vim)
+
+
+class ProteomeState(RootMachine, Logging):
+
+    @property
+    def title(self):
+        return 'proteome'
+
+
+class ProteomeTransitions(Transitions, HasNvim):
+
+    def __init__(self, machine, *a, **kw):
+        Transitions.__init__(self, machine, *a, **kw)
+        HasNvim.__init__(self, machine.vim)
+
+__all__ = ('ProteomeComponent', 'ProteomeState', 'ProteomeTransitions')
