@@ -1,0 +1,2 @@
+class BaseExporter(object):
+    pass
