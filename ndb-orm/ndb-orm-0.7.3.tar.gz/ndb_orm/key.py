@@ -1,0 +1,32 @@
+# -*- encoding: utf-8 -*-
+# vim: sts=2:ts=2:sw=2
+
+_MAX_LONG = 2 ** 63
+# _MAX_KEYPART_BYTES = 500
+
+DEFAULT_PROJECT_NAME = "<default-project-name>" #google.cloud.datastore does not allow empty project names - please initialize if you use keys
+
+def set_default_project_name(project):
+  global DEFAULT_PROJECT_NAME
+  DEFAULT_PROJECT_NAME = project
+
+def get_default_project_name():
+  return DEFAULT_PROJECT_NAME
+
+
+class KeyBase(object):
+  def __init__(self, *_args, **_kwargs):
+    raise NotImplementedError('KeyBase class is not set up (yet)')
+
+def Key(model_cls, *path_args, **kwargs):
+    kwargs['project'] = kwargs.pop('project', None) or get_default_project_name()
+
+    path_args = list(path_args)
+    for i in range(1, len(path_args), 2):
+      path_args[i] = path_args[i]._get_kind()
+    
+    return KeyBase(
+      model_cls._get_kind(),
+      *path_args,
+      **kwargs
+    )
