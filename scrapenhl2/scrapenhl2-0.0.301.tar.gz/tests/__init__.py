@@ -1,0 +1,6 @@
+import scrape_setup_tests
+import scrape_game_tests
+import exception_decor_tests
+import manipulate_tests
+import visualize_tests
+
