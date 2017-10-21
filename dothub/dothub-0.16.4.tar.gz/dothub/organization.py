@@ -1,0 +1,280 @@
+"""Models an organization as configured in github
+
+Via an instance of `Organization` the configuration can be retrieved and updated.
+"""
+
+import functools
+import os
+from . import dict_diff, utils
+
+
+# These fields define the properties that are available in each of the subgroups of
+# the configuration that can be found in github
+FIELDS = {
+    "options": ["billing_email", "company", "email", "location", "name", "description"],
+    # default_repository_permission, members_can_create_repositories
+    "member": ["login"],
+    "membership": ["role"],
+    "team": ["name", "description", "privacy", "permission"],  # slug
+    "team_member": ["login"],
+    "team_membership": ["role"],
+    "team_repos": ["permissions", "name"],
+    "hooks": ["name", "events", "active", "config"],
+}
+
+
+class Organization(object):
+    """Object to syncs the configuration for a github organization
+
+    There are attributes for each major part or an organization like "teams" or "hooks"
+    and two methods to perform full retrieve and update, *describe* and *update*
+    respectively.
+
+    In addition, all repositories of the org can be retrieved via the `repos` attribute.
+    """
+
+    def __init__(self, github_handle, name):
+        """Creates an Organization object given the github api handle and the org name
+
+        :param github_handle: Helper to use the github api
+        :type github_handle: dothub.github_helper.Github
+        :param name: name of the organization to sync
+        :type name: str
+        """
+        self._gh = github_handle
+        self.name = name
+
+    @staticmethod
+    def _get_team_url(team_id, *url_parts):
+        url_parts = ["teams", str(team_id)] + [str(p) for p in url_parts]
+        # join as paths and trash the last forward slash if any
+        res = functools.reduce(os.path.join, url_parts)
+        return res[:-1] if res[-1] == '/' else res
+
+    def _get_url(self, *url_parts):
+        """Given some url parts that are part of a repo returns the full url path
+
+        _get_url("cool", "secret") -> /orgs/<owner>/cool/secret
+
+        :rtype: str
+        """
+        url_parts = ["orgs", self.name] + [str(p) for p in url_parts]
+        # join as paths and trash the last forward slash if any
+        res = functools.reduce(os.path.join, url_parts)
+        return res[:-1] if res[-1] == '/' else res
+
+    @property
+    def options(self):
+        """General configuration of the organization"""
+        url = self._get_url()
+        return self._gh.get(url, FIELDS["options"])
+
+    @options.setter
+    def options(self, new):
+        """Updates the organization general parameters"""
+        current = self.options
+        if current == new:
+            return
+
+        url = self._get_url()
+        self._gh.patch(url, new)
+
+    @property
+    def members(self):
+        """Retrieve the plain members of an organization.
+
+        These members don't need to be linked to any team but for an user to
+        be added to a team they need to be in this list"""
+        result = dict()
+        url = self._get_url("members")
+        members = self._gh.get(url, FIELDS["member"])
+        for member in members:
+            member_name = member["login"]
+            member_url = self._get_url("memberships", member_name)
+            member_fields = self._gh.get(member_url, FIELDS["membership"])
+            result[member_name] = dict(role=member_fields["role"])
+        return result
+
+    @members.setter
+    def members(self, new):
+        current = self.members
+        added, missing, updated = dict_diff.diff(current, new)
+        for member_name in missing:
+            url = self._get_url("members", member_name)
+            self._gh.delete(url)
+
+        for member_name in updated.union(added):
+            member = new[member_name]
+            url = self._get_url("memberships", member_name)
+            self._gh.put(url, member)
+
+    @property
+    def teams(self):
+        """Full configuration of all the teams in the org
+
+        This contains a list of teams with their members, repos and respective permissions
+        """
+        result = dict()
+        url = self._get_url("teams")
+        teams = self._gh.get(url, FIELDS["team"] + ["id"])
+        for team in teams:
+            team_name = team.pop("name")
+            team_id = team.pop("id")
+            team["members"] = {}
+            team["repositories"] = {}
+            members_url = self._get_team_url(team_id, "members")
+            members = self._gh.get(members_url, FIELDS["team_member"])
+            for member in members:
+                member_name = member.pop("login")
+                membership_url = self._get_team_url(team_id, "memberships", member_name)
+                membership = self._gh.get(membership_url, FIELDS["team_membership"])
+                team["members"][member_name] = membership
+
+            repos_url = self._get_team_url(team_id, "repos")
+            repos = self._gh.get(repos_url, FIELDS["team_repos"])
+            for repo in repos:
+                repo_name = repo.pop("name")
+                permissions = repo.pop("permissions")
+                permission = utils.decode_permissions(permissions)
+                repo["permission"] = permission
+                team["repositories"][repo_name] = repo
+
+            result[team_name] = team
+
+        return result
+
+    @teams.setter
+    def teams(self, new):
+        current = self.teams
+        added, missing, updated = dict_diff.diff(current, new)
+
+        teams_id_mapping = {
+            v["name"]: v["id"] for v in
+            self._gh.get(self._get_url("teams"), ["name", "id"])
+        }
+
+        for team_name in missing:
+            team_id = teams_id_mapping[team_name]
+            url = self._get_team_url(team_id)
+            self._gh.delete(url)
+
+        for team_name in added:
+            team = new[team_name]
+            repos = team.pop("repositories", {})
+            members = team.pop("members", {})
+            team["name"] = team_name
+
+            url = self._get_url("teams")
+            team_id = self._gh.post(url, team)["id"]
+
+            for repo_name, repo in repos.items():
+                url = self._get_team_url(team_id, "repos", self.name, repo_name)
+                self._gh.put(url, repo)
+
+            for member_name, member in members.items():
+                url = self._get_team_url(team_id, "members", member_name)
+                self._gh.put(url, member)
+
+        for team_name in updated:
+            new_team = new[team_name]
+            old_team = current[team_name]
+            team_id = teams_id_mapping[team_name]
+            new_repos = new_team.pop("repositories", {})
+            old_repos = old_team.pop("repositories", {})
+            new_members = new_team.pop("members", {})
+            old_members = old_team.pop("members", {})
+
+            if old_team != new_team:
+                url = self._get_team_url(team_id)
+                self._gh.patch(url, new_team)
+
+            # update repos
+            r_added, r_missing, r_updated = dict_diff.diff(old_repos, new_repos)
+            for repo_name in r_added.union(r_updated):
+                repo = new_repos[repo_name]
+                url = self._get_team_url(team_id, "repos", self.name, repo_name)
+                self._gh.put(url, repo)
+
+            for repo_name in r_missing:
+                url = self._get_team_url(team_id, "repos", self.name, repo_name)
+                self._gh.delete(url)
+
+            # update members
+            m_added, m_missing, m_updated = dict_diff.diff(old_members, new_members)
+            for member_name in m_added.union(m_updated):
+                member = new_members[member_name]
+                url = self._get_team_url(team_id, "members", member_name)
+                self._gh.put(url, member)
+
+            for member_name in m_missing:
+                url = self._get_team_url(team_id, "memberships", member_name)
+                self._gh.delete(url)
+
+    @property
+    def hooks(self):
+        """Retrieve the organization level web hooks"""
+        url = self._get_url("hooks")
+        return self._gh.get(url, FIELDS["hooks"])
+
+    @hooks.setter
+    def hooks(self, new):
+        assert isinstance(new, (list, tuple)), "Orgs need to be a list of dict"
+        get_hook_name = lambda h: h["config"]["url"] if h["name"] == "web" else h["name"]
+        current = {get_hook_name(h): h for h in self.hooks}
+        new = {get_hook_name(h): h for h in new}
+        raw_curr_hooks = self._gh.get(self._get_url("hooks"), ["name", "config", "id"])
+        hooks_id = {get_hook_name(h): h["id"] for h in raw_curr_hooks}
+
+        added, missing, updated = dict_diff.diff(current, new)
+        for hook_name in missing:
+            hook_id = hooks_id[hook_name]
+            url = self._get_url("hooks", hook_id)
+            self._gh.delete(url)
+
+        for hook_name in updated:
+            hook_id = hooks_id[hook_name]
+            hook = new[hook_name]
+            # Safe check updating the config
+            new_config = hook.get("config")
+            current_config = current[hook_name].get("config")
+            forbidden_keys = ['token', 'secret']
+            if current_config != new_config and any(k in forbidden_keys
+                                                    for k in new_config):
+                raise RuntimeError("Updating hooks with secrets is not supported")
+            url = self._get_url("hooks", hook_id)
+            self._gh.patch(url, hook)
+
+        for hook_name in added:
+            hook = new[hook_name]
+            url = self._get_url("hooks")
+            self._gh.post(url, hook)
+
+    def describe(self):
+        """Serializes the whole configuration into a dict"""
+        return dict(
+            options=self.options,
+            members=self.members,
+            teams=self.teams,
+            hooks=self.hooks
+        )
+
+    def update(self, data):
+        """Updates the github configuration with the configuration data passed in """
+        if "options" in data:
+            self.options = data["options"]
+        if "members" in data:
+            self.members = data["members"]
+        if "teams" in data:
+            self.teams = data["teams"]
+        if "hooks" in data:
+            self.hooks = data["hooks"]
+
+    @property
+    def repos(self):
+        """Retrieves all the repos in an organization
+
+        :return: yields all the repos
+        """
+        for repo in self._gh.get(self._get_url("repos"), ["name", "fork"]):
+            if not repo["fork"]:
+                yield repo["name"]
