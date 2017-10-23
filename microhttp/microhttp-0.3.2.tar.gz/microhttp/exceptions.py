@@ -1,0 +1,2 @@
+class MicrohttpException(Exception):
+    pass
