@@ -1,0 +1,2043 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+# This file is generated automatically, please do not edit it directly.
+
+import base64
+
+cbf_header = """{#- Jinja2 template -#}
+###CBF: VERSION 1.5, CBFlib v0.7.8 - PILATUS detectors
+{# Empty string #}
+data_{{ name }}
+{# Empty string #}
+_array_data.header_convention "PILATUS_1.2"
+_array_data.header_contents
+;
+{%- if Detector_identifier is defined %}
+# Detector: {{ Detector_identifier }}
+{%- endif %}
+# {{ datetime }}
+{%- if pixel_size is defined %}
+# Pixel_size {{ '{:d}e-6 m x {:d}e-6 m'.format(*pixel_size) }}
+{%- endif %}
+{%- if Silicon is defined %}
+# Silicon sensor, thickness {{ '{:.6f}'.format(Silicon) }} m
+{%- endif %}
+{%- if Exposure_time is defined %}
+# Exposure_time {{ Exposure_time }} s
+{%- endif %}
+{%- if Exposure_period is defined %}
+# Exposure_period {{ Exposure_period }} s
+{%- endif %}
+{%- if Tau is defined %}
+# Tau = {{ Tau }} s
+{%- endif %}
+{%- if Count_cutoff is defined %}
+# Count_cutoff {{ Count_cutoff }} counts
+{%- endif %}
+{%- if Threshold_setting is defined %}
+# Threshold_setting: {{ Threshold_setting }} eV
+{%- endif %}
+{%- if Gain_setting is defined %}
+# Gain_setting: {{ Gain_setting }}
+{%- endif %}
+{%- if N_excluded_pixels is defined %}
+# N_excluded_pixels = {{ N_excluded_pixels }}
+{%- endif %}
+{%- if Excluded_pixels is defined %}
+# Excluded_pixels: {{ Excluded_pixels }}
+{%- endif %}
+{%- if Flat_field is defined %}
+# Flat_field: {{ Flat_field }}
+{%- endif %}
+{%- if Trim_file is defined %}
+# Trim_file: {{ Trim_file }}
+{%- endif %}
+{%- if Image_path is defined %}
+# Image_path: {{ Image_path }}
+{%- endif %}
+{%- if Ratecorr_lut_directory is defined %}
+# Ratecorr_lut_directory: {{ Ratecorr_lut_directory }}
+{%- endif %}
+{%- if Retrigger_mode is defined %}
+# Retrigger_mode: {{ Retrigger_mode }}
+{%- endif %}
+{%- if Wavelength is defined %}
+# Wavelength {{ Wavelength }} A
+{%- endif %}
+{%- if Start_angle is defined %}
+# Start_angle {{ '{:.2f}'.format(Start_angle) }} deg.
+{%- endif %}
+{%- if Angle_increment is defined %}
+# Angle_increment {{ '{:.2f}'.format(Angle_increment) }} deg.
+{%- endif %}
+{%- if Omega is defined %}
+# Omega {{ '{:.2f}'.format(Omega) }} deg.
+{%- endif %}
+{%- if Omega_increment is defined %}
+# Omega_increment {{ '{:.2f}'.format(Omega_increment) }} deg.
+{%- endif %}
+{%- if Phi is defined %}
+# Phi {{ '{:.2f}'.format(Phi) }} deg.
+{%- endif %}
+{%- if Phi_increment is defined %}
+# Phi_increment {{ '{:.2f}'.format(Phi_increment) }} deg.
+{%- endif %}
+{%- if Kappa is defined %}
+# Kappa {{ Kappa }} deg.
+{%- endif %}
+{%- if Oscillation_axis is defined %}
+# Oscillation_axis {{ Oscillation_axis }}
+{%- endif %}
+{%- if Detector_distance is defined %}
+# Detector_distance {{ Detector_distance }} m
+{%- endif %}
+{%- if Detector_Voffset is defined %}
+# Detector_Voffset {{ Detector_Voffset }} m
+{%- endif %}
+{%- if Beam_x is defined and Beam_y is defined %}
+# Beam_xy ({{ Beam_x }}, {{ Beam_y }}) pixels
+{%- endif %}
+{%- if Flux is defined %}
+# Flux {{ Flux }} counts
+{%- endif %}
+{%- if Temperature is defined %}
+# Temperature {{ '{:.2f}'.format(Temperature) }} K
+{%- endif %}
+{%- if Blower is defined %}
+# Blower {{ '{:.1f}'.format(Blower) }} C
+{%- endif %}
+{%- if Lakeshore is defined %}
+# Lakeshore {{ '{:.2f}'.format(Lakeshore) }} K
+{%- endif %}
+;
+{# Empty string #}
+_array_data.data
+;
+--CIF-BINARY-FORMAT-SECTION--
+Content-Type: application/octet-stream;
+     conversions="x-CBF_BYTE_OFFSET"
+Content-Transfer-Encoding: BINARY
+X-Binary-Size: {{ X_Binary_Size }}
+X-Binary-ID: 1
+X-Binary-Element-Type: "signed 32-bit integer"
+X-Binary-Element-Byte-Order: LITTLE_ENDIAN
+Content-MD5: {{ Content_MD5 }}
+X-Binary-Number-of-Elements: {{ X_Binary_Number_of_Elements }}
+X-Binary-Size-Fastest-Dimension: {{ X_Binary_Size_Fastest_Dimension }}
+X-Binary-Size-Second-Dimension: {{ X_Binary_Size_Second_Dimension }}
+X-Binary-Size-Padding: 4095
+{# Empty string #}
+{# Empty string #}
+"""
+
+crysalisExpSettings_ini = """[SM\PX]
+isprotein=0
+is_deltattt_sm=0
+issmartbkg_sm=0
+issinglewave_sm=0
+ishklcheck_sm=0
+is2ndcycle_sm=1
+iscomputecomp_sm=1
+ismtzexport_sm=0
+isxdsexport_sm=0
+ismosflmexport_sm=0
+isrungral_sm=1
+issymm_sm=0
+isnoncentrosymmetric_sm=0
+iminlatt_sm=2
+imaxlatt_sm=120
+imaxtime_sm=400
+overlaptype_sm=0
+isskiprefframes_sm=0
+isproffitpredictuncertainty_sm=0
+completenessgoal_sm=1.000
+difflimitioversig_sm=2.000
+is_deltattt_px=1
+issmartbkg_px=1
+issinglewave_px=1
+ishklcheck_px=1
+is2ndcycle_px=1
+iscomputecomp_px=1
+ismtzexport_px=0
+isxdsexport_px=0
+isrungral_px=1
+issymm_px=1
+iminlatt_px=30
+imaxlatt_px=250
+overlaptype_px=1
+imaxtime_px=1200
+isskiprefframes_px=1
+isproffitpredictuncertainty_px=0
+completenessgoal_px=0.970
+difflimitioversig_px=2.000
+isautoshape=0
+iisumffactive_sm_2=1
+iumffmaxpeakset_sm_2=400
+dumffmaxtime_sm=5.000
+[CCD]
+irecmovie_ccd=1
+ifastmoviemode_ccd_improved=0
+[JetShadow]
+use=0
+parameters=30.000000 0.000000 13.000000 6.000000
+[Restart concurrent]
+mode=0
+"""
+
+dectris_monitor = """{#- Jinja2 template -#}
+[Monitor]
+{% for list in data.values() -%}
+{% set i = loop.index -%}
+{%- for dict in list -%}
+{{ basename }}_{{ i }}_{{ loop.index }}.img={{ dict.Flux / averageMon }}
+{% endfor -%}
+{%- endfor -%}
+"""
+
+dectrisaliases_ini = """{#- Jinja2 template -#}
+[Run list aliases]
+{% if crysis -%}
+{% for scan in scans.values() -%}
+{%- set i = loop.index -%}
+{%- for scanitem in scan -%}
+{{ basename }}_{{ i }}_{{ loop.index }}={{ scanitem.cbf }}
+{% endfor -%}
+{%- endfor -%}
+{%- else -%}
+{%- set i = 0 -%}
+{% for scanlist in scans.values() -%}
+{%- set i = i + 1 -%}
+{%- for scan in scanlist -%}
+{%- for cbf in scan.nfiles -%}
+{{ basename }}_{{ i }}_{{ loop.index }}={{ cbf }}
+{% endfor -%}
+{%- endfor -%}
+{%- endfor -%}
+{%- endif -%}
+"""
+
+edf_header = """{#- Jinja2 template -#}
+{
+{% if header is defined -%}
+{%- for key, val in header.iteritems() %}
+{{ key }} = {{ val }} ;
+{%- endfor -%}
+{%- else -%}
+EDF_DataBlockID = 0.Image.Psd ;
+EDF_BinarySize = {{ binsize }} ;
+EDF_HeaderSize = {{ headersize }} ;
+ByteOrder = LowByteFirst ;
+DataType = {% if datatype %}{{ datatype }}{% else %}SignedInteger{% endif %} ;
+Dim_1 = {{ dim_1 }} ;
+Dim_2 = {{ dim_2 }} ;
+Image = 0 ;
+Bubble_normalized = {% if normalized %}1{% else %}0{% endif %} ;
+HeaderID = EH:000000:000000:000000 ;
+Size = {{ binsize }} ;
+conversions = x-CBF_BYTE_OFFSET ;
+{%- endif %}
+}
+{# Empty string #}
+"""
+
+esp_header = """{#- Jinja2 template -#}
+ESPERANTO FORMAT 1 CONSISTING OF 25 LINES OF 256 BYTES EACH
+IMAGE {{ shape }} {{ shape }} 1 1 "{% if datatype %}{{ datatype }}{% else %}4BYTE_LONG{% endif %}"
+SPECIAL_CCD_1 0 0 0 0 0 0
+SPECIAL_CCD_2 0 0 0 0 0
+SPECIAL_CCD_3 0 0 0 0 0
+SPECIAL_CCD_4 0 0 0 0 0 0 0 0
+SPECIAL_CCD_5 0 0 0 0
+TIME {{ Exposure_time }} 0 0
+MONITOR {% if Flux %}{{ Flux }}{% else %}0{% endif %} 0 0 0
+PIXELSIZE {{ pixel_size }} {{ pixel_size }}
+TIMESTAMP "{{ datetime }}"
+GRIDPATTERN ""
+STARTANGLESINDEG {{ omega }} {{ theta }} {{ kappa }} {{ phi }}
+ENDANGLESINDEG {{ omega + domega }} {{ theta + dtheta }} {{ kappa + dkappa }} {{ phi + dphi }}
+GONIOMODEL_1 0 0 0 0 0 {{ center_x }} {{ center_y }} {{ alpha }} 0 {{ dist }}
+GONIOMODEL_2 0 0 0 0
+WAVELENGTH {{ l1 }} {{ l2 }} {{ l12 }} {{ b }}
+MONOCHROMATOR {{ mono }} {{ monotype }}
+ABSTORUN 0
+HISTORY "(c) 2015-2017 ID11 ESRF, 2017 SNBL@ESRF, Vadim Dyadkin, diadkin@esrf.fr"
+{# Empty string #}
+{# Empty string #}
+{# Empty string #}
+{# Empty string #}
+{# Empty string #}
+{# Empty string #}
+"""
+
+pafile = """#$$#XCALIBUR SYSTEM
+#$$#XCALIBUR PARAMETER FILE - GENERATED BY THE COMMANDS WD PAR OR WD CAL
+#$$#THIS FILE SHOULD NOT BE EDITED BY HAND - USE THE PROGRAM KM4SETUP OR MODIFY PARS IN THE PROGRAM
+#$$#**********************************************************************************************
+#$$# D A T E  {{ date }}
+#$$#**********************************************************************************************
+#$$#CELL INFORMATION
+#$$#      5.96002 (    0.00100 )     9.04296 (    0.00138 )    18.39626 (    0.00266 )
+#$$#     89.99769 (    0.01211 )    90.00650 (    0.01261 )    90.02161 (    0.01297 )
+#$$#  V =       991.49
+#$$#PROGRAM CRYSALIS Version 1.171.35.21 (release 20-01-2012 CrysAlis171 .NET)
+#$$#MACHINE INFORMATION
+#$$#   - GONIOMETER KUMA/OXFORD INSTRUMENTS/OXFORD DIFFRACTION KM4
+#$$#   - ALPHA (DEG)   50.00000 BETA (DEG)    0.00000
+#$$#   - WAVELENGTH USER (ANG): A1	{{ wavelength }} A2	{% if wavelength2 %}{{ wavelength2 }}{% else %}{{ wavelength }}{% endif %} B1	{% if wavelength3 %}{{ wavelength3 }}{% else %}{{ wavelength }}{% endif %}
+#$$#   - MONOCHROMATOR DVALUE (ANG)    {% if mono %}{{ mono }}{% else %}3.35400{% endif %} MONOCHROMATOR THETA (DEG)   {% if mono %}6.16948{% else %}13.27708{% endif %}
+#$$#   - X-RAY BEAM ORIENTATION (DEG): X2   0.08983 X3    0.00000
+#$$#   - BEAM PATH ABSORPTIONCOEFFICIENTS (MM-1): AIR    0.00013 BE    0.04736
+#$$#   - BE THICKNESS (MM):    0.50000
+#$$#   - SOFTWARE ZEROCORRECTION (DEG): OMEGA 0.04303 THETA -0.32229 KAPPA 0.00000 PHI 0.00000
+#$$#   - MACHINE OFFSETS (STEPS): OMEGA          0 THETA          0 KAPPA          0 PHI          0
+#$$#- CCD DETECTOR KM4CCD/SAPPHIRE
+#$$#   - CHIP: n/a n/a {% if chip %}{{ chip1 }}x{{ chip2 }}{% else %}(1024x1024){% endif %} n/a
+#$$#   - TAPER:  (,),
+#$$#            ZOOM 1.000000 PIXELSIZE IN 1X1 BINNING (MM)  {% if pixel_size %}{{ pixel_size }}{% else %}0.172{% endif %}
+#$$#   - GAIN 15.00 (DOUBLE-CORRELATED-DIVIDE-BY-2 GAIN)
+#$$#   - DETECTOR ROTATION (DEG): X1    0.28527 X2    -0.04836 X3    0.00000
+#$$#   - DETECTOR DISTANCE (MM):   {{ dist }}
+#$$#   - DETECTOR ZERO (PIX, 1X1 BINNING): X  {{ center_x }} Y  {{ center_y }}
+#$$#   - DETECTOR BINNING (PIX): X:   1 Y:   1
+#$$#   - SETUP PATH : {{ path }}
+#$$#   - GEOMETRIC CORRECTION FILE : NONE
+#$$#   - FLAT FIELD CORRECTION FILE: NONE
+#$$#   - GEOMETRIC CORRECTION STATUS: ALLOCATED:0, USED:0, GRIDX:0, GRIDY:0
+#$$#   - GEOMETRIC CORRECTION GRID LOADED: NONE
+#$$# CCD CHIPCONSTANTS systemgain darksignal readnoiserms overflowthreshold
+CCD CHIPCONSTANTS 1.0 0.500 2.000 1048575
+#$$# CCD DARKACQUISITION numofdarkimages smpo_numofdarkimages type time
+CCD DARKACQUISITION 4 2 DARK_TRIGGER_REF 60
+#$$# CCD DISPLAYOFFSET offset
+CCD DISPLAYOFFSET       50
+#$$# CCD DISPLAYSHIFT shift
+CCD DISPLAYSHIFT        1
+#$$# CCD ISACARDSETTINGS iosettingno memsettingno interruptno
+CCD ISACARDSETTINGS 3 2 5
+#$$# CCD PARAMETERS bx by x1 y1 xw yw dark flood spike readnode mpp gain
+CCD PARAMETERS 1 1 0 0 {% if chip %}{{ chip1 }} {{ chip2 }}{% else %}1679 1475{% endif %} DARKOFF FLOODOFF SPIKECORRELATION READNODEAD FIP60 GAINBOTH
+#$$# CCD VISUALIZATION lookuptablename colortablename
+CCD VISUALIZATION LUT1 MORNINGGLORY
+#$$# CRYSTALLOGRAPHY ALPHAANGLEINDEG alpha alphapd delta deltapd
+CRYSTALLOGRAPHY ALPHAANGLEINDEG   50.00   50.00   90.00000   90.00000
+#$$# CRYSTALLOGRAPHY BETAANGLEINDEG beta betapd gamma gammapd
+CRYSTALLOGRAPHY BETAANGLEINDEG    0.00000    0.02787   90.00000   90.00000
+#$$# CRYSTALLOGRAPHY DATAREDUCTION C1 C2 LLthresh searchwinhalf LLprofpts LLstart LLback minwin ibackframes
+CRYSTALLOGRAPHY DATAREDUCTION    2.50000    0.00000    6.00000     2    30     1     1     3     5
+#$$# CRYSTALLOGRAPHY DATRED3D #harvestref inxwin inywin
+CRYSTALLOGRAPHY DATRED3D 1000 48 48
+#$$# CRYSTALLOGRAPHY EWALDEXPLORERCAMERA frx fry frz tox toy toz upx upy upz aph apv zo front back
+CRYSTALLOGRAPHY EWALDEXPLORERCAMERA 1.0 0.0 0.0 -1.0 0.0 0.0 0.0 0.0 2.0 15.0 15.0 0.2 0 3
+#$$# CRYSTALLOGRAPHY EWALDEXPLORERSCREEN centerh centerv sizeh sizev
+CRYSTALLOGRAPHY EWALDEXPLORERSCREEN 255 255 512 512
+#$$# CRYSTALLOGRAPHY NIGGLINUM ordinal niggli
+CRYSTALLOGRAPHY NIGGLINUM 0 35
+#$$# CRYSTALLOGRAPHY NIGGLINUM ordinal niggli
+CRYSTALLOGRAPHY NIGGLINUM 1 31
+#$$# CRYSTALLOGRAPHY NUMOFCELLS num
+CRYSTALLOGRAPHY NUMOFCELLS        2
+#$$# CRYSTALLOGRAPHY NUMOFCELLSELECTED num
+CRYSTALLOGRAPHY NUMOFCELLSELECTED        1
+#$$# CRYSTALLOGRAPHY ORIENTATIONMATRIX ub11 ub12 ub13 ... ub33 sub11 sub12 sub13 ... sub33
+CRYSTALLOGRAPHY ORIENTATIONMATRIX -1.6894770E-002 -7.3228995E-002 -4.2883594E-002 7.9930593E-002 -2.0799582E-003 -3.9145127E-003 1.4021523E-002 -7.6538277E-002 4.1110883E-002 1.3594009E-005 1.9420319E-005 8.9086477E-006 1.2428387E-005 1.7755118E-005 8.1447731E-006 1.3554416E-005 1.9363756E-005 8.8827005E-006
+#$$# CRYSTALLOGRAPHY PEAKHUNTINGSCANWIDTH C1 C2
+CRYSTALLOGRAPHY PEAKHUNTINGSCANWIDTH    1.00000    0.00000
+#$$# CRYSTALLOGRAPHY PEAKLOCATIONTABLEENTRIES numofpeaks
+CRYSTALLOGRAPHY PEAKLOCATIONTABLEENTRIES    200000
+#$$# CRYSTALLOGRAPHY PEAKTABLEENTRIES numofpeaks
+CRYSTALLOGRAPHY PEAKTABLEENTRIES     200000
+#$$# CRYSTALLOGRAPHY REDFORM r1 r2 r3 r4 r5 r6
+CRYSTALLOGRAPHY REDFORM   8.90584865699E+001   1.51732728652E+002   2.94091358333E+002   4.22511681824E+001   1.50500907943E-001   8.68068266216E-003
+#$$# CRYSTALLOGRAPHY SIGMAREDFORM sr1 sr2 sr3 sr4 sr5 sr6
+CRYSTALLOGRAPHY SIGMAREDFORM   0.00000000000E+000   0.00000000000E+000   0.00000000000E+000   0.00000000000E+000   0.00000000000E+000   0.00000000000E+000
+#$$# CRYSTALLOGRAPHY SIGMAUB sub11 sub12 sub13 sub21 sub22 sub23 sub31 sub32 sub33
+CRYSTALLOGRAPHY SIGMAUB   1.84797091592E-010   3.77148797034E-010   7.93640042416E-011   1.54464804286E-010   3.15244220669E-010   6.63373285638E-011   1.83722182099E-010   3.74955035116E-010   7.89023675307E-011
+#$$# CRYSTALLOGRAPHY SIGMAUM sum11 sum12 sum13 sum21 sum22 sum23 sum31 sum32 sum33
+CRYSTALLOGRAPHY SIGMAUM   4.30291094497E-012   4.26333622558E-012   1.11470710805E-012   4.26333622558E-012   1.68813835518E-011   2.22021542351E-012   1.11470710805E-012   2.22021542351E-012   1.12128155741E-012
+#$$# CRYSTALLOGRAPHY UB ub11 ub12 ub13 ub21 ub22 ub23 ub31 ub32 ub33
+CRYSTALLOGRAPHY UB  -1.68947699218E-002  -7.32289948389E-002  -4.28835937346E-002   7.99305932828E-002  -2.07995820653E-003  -3.91451274126E-003   1.40215232844E-002  -7.65382772048E-002   4.11108832953E-002
+#$$# CRYSTALLOGRAPHY UD ud11 ud12 ud13 ud21 ud22 ud23 ud31 ud32 ud33
+CRYSTALLOGRAPHY UD   0.00000000000E+000   0.00000000000E+000   0.00000000000E+000   0.00000000000E+000   0.00000000000E+000   0.00000000000E+000   0.00000000000E+000   0.00000000000E+000   0.00000000000E+000
+#$$# CRYSTALLOGRAPHY UM um11 um12 um13 um21 um22 um23 um31 um32 um33
+CRYSTALLOGRAPHY UM   6.87093610846E-003  -2.24851001684E-006   9.88056331109E-004  -2.24851001684E-006   1.12249197887E-002   1.90830537823E-006   9.88056331109E-004   1.90830537823E-006   3.54443074691E-003
+#$$# CRYSTALLOGRAPHY UPDATECELLDATA
+CRYSTALLOGRAPHY UPDATECELLDATA
+#$$# CRYSTALLOGRAPHY WAVELENGTH type
+CRYSTALLOGRAPHY WAVELENGTH {{ wavelength }} {% if wavelength2 %}{{ wavelength2 }}{% else %}{{ wavelength }}{% endif %} {% if wavelength3 %}{{ wavelength3 }}{% else %}{{ wavelength }}{% endif %}
+#$$# DETECTOR CHARACTERISTICS offsetdeg deadtime filter
+DETECTOR CHARACTERISTICS 17.0 0.00001 6.75
+#$$# EXPERIMENT COLLIMATOR len dia type
+EXPERIMENT COLLIMATOR 140 0.5 PINHOLE
+#$$# EXPERIMENT COMPOUNDNAME compoundname
+EXPERIMENT COMPOUNDNAME "compound name"
+#$$# EXPERIMENT GENERATOR kV mA type
+EXPERIMENT GENERATOR     55.000     45.000 SEALEDTUBE
+#$$# EXPERIMENT TEMPERATURE tempinK
+EXPERIMENT TEMPERATURE    293.000
+#$$# EXPERIMENT USER name
+EXPERIMENT USER "Dr. Vadim Dyadkin"
+#$$# FILE CHIP filename
+FILE CHIP "{{ basename }}.ccd"
+#$$# FILE FLOOD filename
+FILE FLOOD "NONE"
+#$$# FILE GEO filename
+FILE GEO "NONE"
+#$$# FILE VERSION versionmajor versionminor versionstring
+FILE VERSION 1 0 "Setup version 1.0 20.8.2007"
+#$$# GEOMETRYCORRECTION GRIDBASE e1xmm e1ymm e2xmm e2ymm offsetxmm offsetymm rotangledeg
+GEOMETRYCORRECTION GRIDBASE 0.508 0.0 0.0 0.508 0.0 0.0 2.0
+#$$# GEOMETRYCORRECTION SEARCHWINDOW basewidthpix widthpix
+GEOMETRYCORRECTION SEARCHWINDOW 12 12
+#$$# GONIOMETER ANGLE_LOLIM omlolimdeg thlolimdeg kalolimdeg phlolimdeg
+GONIOMETER ANGLE_LOLIM  -179.00   -93.00  -179.00  -360.00
+#$$# GONIOMETER ANGLE_RANGEO omrangeodeg thrangeodeg karangeodeg phrangeodeg
+GONIOMETER ANGLE_RANGEO 0 0 0 0
+#$$# GONIOMETER ANGLE_UPLIM omuplimdeg thuplimdeg kauplimdeg phuplimdeg
+GONIOMETER ANGLE_UPLIM   179.00   120.00   179.00   360.00
+#$$# GONIOMETER COMPORT numofcomport
+GONIOMETER COMPORT        2
+#$$# GONIOMETER COOLSWITCH coolswitch
+GONIOMETER COOLSWITCH        1
+#$$# GONIOMETER DACDEF hv ll wi ga pt deadtime hvm llm wim gam ptm deadtimem fin fimonref fiblt isfilter filter1 filter2 filter3
+GONIOMETER DACDEF   646.2558     0.8000     1.7000   140.0000     0.0000 1.2500000E-005      0.0000     0.0000     0.0000     0.0000     0.0000 0.00000000000E+000   80000       0       0 TRUE    7.90000     1.00000     1.00000
+#$$# GONIOMETER KM4VIDEO numoffaces
+GONIOMETER KM4VIDEO       40
+#$$# GONIOMETER MICROSCOPE type
+GONIOMETER MICROSCOPE SIDEWAYS
+#$$# GONIOMETER MOTORBACKDIRECTION omdir thdir kadir phdir
+GONIOMETER MOTORBACKDIRECTION 3 3 1 0
+#$$# GONIOMETER MOTORBACKSPEED ommusperstep thmusperstep kamusperstep phmusperstep
+GONIOMETER MOTORBACKSPEED 300 300 300 300
+#$$# GONIOMETER MOTORBACKSTEPS steps
+GONIOMETER MOTORBACKSTEPS      500
+#$$# GONIOMETER MOTORDETECTORCOMM omsteps thsteps kasteps phsteps
+GONIOMETER MOTORDETECTORCOMM 30 36 61 34
+#$$# GONIOMETER MOTORDETECTORLIMIT steps
+GONIOMETER MOTORDETECTORLIMIT     6400
+#$$# GONIOMETER MOTORDETECTORSPEED ommusperstep thmusperstep kamusperstep phmusperstep
+GONIOMETER MOTORDETECTORSPEED 350 300 300 300
+#$$# GONIOMETER MOTORZEROZONE omdeg thdeg kadeg phdeg ax4 ax5 ax6 ax7 ax8 ax9 omdegpd thdegpd kadegpd phdegpd ax4pd ax5pd ax6pd ax7pd ax8pd ax9pd
+GONIOMETER MOTORZEROZONE  0.00000  0.00000  0.00000  0.00000  0.00000  0.00000  0.00000  0.00000  0.00000  0.00000  0.00000  0.00000  0.00000  0.00000  0.00000  0.00000  0.00000  0.00000  0.00000  0.00000
+#$$# GONIOMETER PHICORR0_170 c0 c10 c20 c30 c40 c50 c60 c70 c80 c90 c100 c110 c120 c130 c140 c150 c160 c170
+GONIOMETER PHICORR0_170 0.00 10.00 20.02 30.03 40.04 50.04 60.04 70.05 80.06 90.05 100.04 110.04 120.04 130.03 140.02 150.02 160.01 170.00
+#$$# GONIOMETER PHICORR180_360 c180 c190 c200 c210 c220 c230 c240 c250 c260 c270 c280 c290 c300 c310 c320 c330 c340 c350 c360
+GONIOMETER PHICORR180_360 179.98 189.97 199.97 209.95 219.94 229.94 239.93 249.93 259.92 269.93 279.93 289.93 299.93 309.95 319.95 329.96 339.97 349.99 360.00
+#$$# GONIOMETER SIMULATOR onoff
+GONIOMETER SIMULATOR off
+#$$# GONIOMETER TYPE specifier bsorient. xtobsmm bsdiamm CCDType isfilter filter1 filter2 filter3 remeasuretype isfrontend isgen.check  ispdav. isareadetav. Ispd bsang bsx bsy bsh
+GONIOMETER TYPE KUMA_KM4 TOP    15.00000    1.50000 BC2_SAPPHIRE   FALSE     1.00000    1.00000    1.00000   TIME FALSE FALSE TRUE TRUE FALSE     0.00000 0.0 0.0 1.50
+#$$# LOG ENABLE onoff
+LOG ENABLE on
+#$$# MAR SIGMACONTROL sc sigmasc readnoise darknoise E1 E2 rejectsc
+MAR SIGMACONTROL 1.0 4.0 1.0 0 1 1 1
+#$$# MAR TEST s1 s2 s3 s4 s5 d1 d2 d3 d4 d5 l1 l2 l3 l4 l5
+MAR TEST NONE NONE NONE NONE NONE 0.0 0.0 0.0 0.0 0.0 0 0 0 0 0
+#$$# RESERVE TEST1 dscsv0 dsctTx dsctf dscwOa dscwOb dscwC dmobf lmosm lmoss dmosn1 dmosn2 dmosVmin iswsmode swcephi  swceom swcegiveup swceint swcehalfcut swsmiwidth
+RESERVE TEST1   0.200000   0.000000   0.000000   1.000000   0.500000   1.001000   0.500000     0     0   3.000000  25.000000   0.050000     0 2.000 0.500   150 0.250     8 0.000
+#$$# RESERVE TEST2 dmabn11 dmabn12 dmabn13 dmabn21 dmabn22 dmabn23 dmabn31 dmabn32 dmabn33 lmass1 lmass2 lmass3
+RESERVE TEST2   0.000000   0.000000   0.000000   0.000000   0.000000   0.000000   0.000000   0.000000   0.000000     0     1     2
+#$$# RESERVE TEST3 ddaDh ddaDv ddlv ldlN dtrTmin dtrTmax ltrNshell ltrNstop lHmin lHmax lKmin lKmax lLmin lLmax
+RESERVE TEST3   0.000000   0.000000   0.000000 0   2.000000  40.000000 0 0   0.000000   0.000000   0.000000   0.000000   0.000000   0.000000
+#$$# RESERVE TEST4 lrcn lrrn1 lrrn2 lrrn3 drrdO drrf
+RESERVE TEST4 0 0 0 0   0.000000   5.000000
+#$$# RESERVE TEST5 darrh1 darrk1 darrl1 darrt1 darrfil1 darrh2 darrk2 darrl2 darrt2 darrfil2  darrh3 darrk3 darrl3 darrt3 darrfil3
+RESERVE TEST5   0.000000   0.000000   0.000000   0.000000          0   0.000000   0.000000   0.000000   0.000000          0   0.000000   0.000000   0.000000   0.000000          0
+#$$# ROTATION ABSORPTIONCOEFFICIENTS wavelengthtype
+ROTATION ABSORPTIONCOEFFICIENTS 0.000000 0.000000 0.000000
+#$$# ROTATION BEAM b2 b3 b2pd b3pd eqpd
+ROTATION BEAM   -0.01932    0.00000   -0.01907    0.00000    0.00000
+#$$# ROTATION DETECTORORIENTATION d1 d2 d3 distanceinmm xorigininpix yorigininpix d1pd d2pd d3pd distanceinmmpd xorigininpixpd yorigininpixpd
+ROTATION DETECTORORIENTATION    0.0    0.00    0.00000   {{ dist }} {{ center_x }} {{ center_y }} -0.23494    0.11672    0.00000   50.65263  518.03346  502.88889
+#$$# ROTATION MONOCHROMATOR (dvalue|prepolfac) (orientation|type)
+ROTATION MONOCHROMATOR   {% if mono %}{{ mono }} {{ monotype }}{% else %}0.000 SYNCHROTRON{% endif %}
+#$$# ROTATION PEAKINTEGRITYAREA enlargementfactor constantinpix userefMo userefCu refmod-closeMo,farMo,closeCu,farCu(d1,d2,t0,dd,x,y)
+ROTATION PEAKINTEGRITYAREA 3.000 5.000 FALSE FALSE 0.745 0.401 0.766 60.000 505.164 493.255  0.745 0.401 0.766 100.000 505.164 493.255  0.745 0.401 0.766 60.000 505.164 493.255  0.745 0.401 0.766 100.000 505.164 493.255
+#$$# ROTATION SCANWIDTH c1_constant c2_thetadep ewaldconst ewaldlorentz
+ROTATION SCANWIDTH 0.500 0.000 1.000 0.000
+#$$# ROTATION ZEROCORRECTION omdeg thdeg kadeg phdeg ax4 ax5 ax6 ax7 ax8 ax9 omdegpd thdegpd kadegpd phdegpd ax4pd ax5pd ax6pd ax7pd ax8pd ax9pd
+ROTATION ZEROCORRECTION  0.00 0.0  0.00000  0.00000  0.00000  0.00000  0.00000  0.00000  0.00000  0.00000  0.00000  0.00000  0.00000  0.00000  0.00000  0.00000  0.00000  0.00000  0.00000  0.00000
+#$$# ROTSIMULATOR ALPHAANGLEINDEG alpha
+ROTSIMULATOR ALPHAANGLEINDEG       50
+#$$# ROTSIMULATOR BACKGROUNDNOISE typeofnoise
+ROTSIMULATOR BACKGROUNDNOISE NONE
+#$$# ROTSIMULATOR BEAM b2 b3
+ROTSIMULATOR BEAM 0.0 0.0
+#$$# ROTSIMULATOR BETAANGLEINDEG beta
+ROTSIMULATOR BETAANGLEINDEG        0
+#$$# ROTSIMULATOR CRYSTALLATTICE a b c alpha beta gamma
+ROTSIMULATOR CRYSTALLATTICE 10.0 10.0 10.0 90.0 90.0 90.0
+#$$# ROTSIMULATOR CRYSTALORIENTATION r1 r2 r3
+ROTSIMULATOR CRYSTALORIENTATION 0.0 0.0 0.0
+#$$# ROTSIMULATOR DETECTORORIENTATION d1 d2 d3 distanceinmm xorigininpix yorigininpix
+ROTSIMULATOR DETECTORORIENTATION 0.0 0.0 0.0 72.0 512.0 512.0
+#$$# ROTSIMULATOR DIFFRACTIONINTENSITY int dw
+ROTSIMULATOR DIFFRACTIONINTENSITY 10000 0.0
+#$$# ROTSIMULATOR PEAKSHAPE xsizeinmm xsigmafactor ysizeinmm ysigmafactor
+ROTSIMULATOR PEAKSHAPE 1.5 15.0 1.5 15.0
+#$$# ROTSIMULATOR SCANWIDTH c1_constant c2_thetadep omsigmafactor
+ROTSIMULATOR SCANWIDTH 1.0 1.0 10.0
+#$$# ROTSIMULATOR SIMULATOR onoff
+ROTSIMULATOR SIMULATOR off
+#$$# ROTSIMULATOR ZEROCORRECTION om th ka ph
+ROTSIMULATOR ZEROCORRECTION 0.0 0.0 0.0 0.0
+#$$# SHAPE ABSORPTIONCOEFFICIENT coeffininvmm z
+SHAPE ABSORPTIONCOEFFICIENT   0.000000   1.000000
+#$$# SHAPE CHEMICALFORMULA formula
+SHAPE CHEMICALFORMULA "C10 H10 O5 N5"
+#$$# SHAPE FACE h k l dinmm
+SHAPE FACE 0.0 0.0 0.0 0.0
+#$$# SHAPE VIDEOGRABBER grabber_type vfw_channel
+SHAPE VIDEOGRABBER FALCON_PCI 0
+#$$# SHAPE VIDEOSETUP cenx ceny scale
+SHAPE VIDEOSETUP 384 288 0.00101890
+#$$# STOE TEST s1 s2 s3 s4 s5 d1 d2 d3 d4 d5 l1 l2 l3 l4 l5
+STOE TEST NONE NONE NONE NONE NONE 0.0 0.0 0.0 0.0 0.0 0 0 0 0 0
+#$$#END SETUP XCALIBUR SYSTEM
+"""
+
+setfile1M = """#XCALIBUR SYSTEM
+#XCALIBUR SETUP FILE
+#*******************************************************************************************************
+# CHIP CHARACTERISTICS e_19_020609.ccd         D A T E Wed-Sep-16-10-00-59-2009
+# This program produces version 1.9
+#******************************************************************************************************
+#THIS FILE IS USER READABLE - BUT SHOULD NOT BE TOUCHED BY THE USER
+#ANY CHANGES TO THIS FILE WILL RESULT IN LOSS OF WARRANTY!
+#WATCH OUT: THE REPLACE PIXEL HAS TO 1X1,2X2,4x4 BINNING COMPATIBLE!
+#NOTE: THE FUNCTIONS BADCOL1X1,BADCOL2X2,BADCOL4X4 ARE ONLY USED IN THEIR RESPECTIVE BINNINGS AND HAVE TO BE COMPATIBLE WITH THEM!
+#CHIP IDCODE producer type serial
+CHIP IDCODE "n/a" "n/a" "n/a"
+#CHIP TAPER producer type serial
+CHIP TAPER "" "" ""
+#CHIP SCINTILLATORID id
+#id: 1=GREEN400; 2=40; 3=60; 4=100; 5=MED; 6=FINE; 7=GREEN400_NEW
+#CHIP SCINTILLATORID 1
+#ALL COORDINATES GO FROM 0 TO N-1
+#CHIP BADPOINT treatment options: IGNORE,REPLACE,AVERAGE
+#CHIP BADPOINT x1x1 y1x1 treatment r1x1x1 r1y1x1 r2x1x1 r2y1x1
+#CHIP BADPOINT 630 422 REPLACE 632 422 0 0
+#CHIP BADROW treatment options: IGNORE,REPLACE
+#CHIP BADROW xs1x1 xe1x1 y1x1 treatment rxs1x1 rxe1x1 ry1x1
+#CHIP BADROW 800 1023 20 REPLACE 800 1023 19
+#CHIP BADROW1X1 treatment options: IGNORE,REPLACE,AVERAGE,REPLACETOP,REPLACEBOTTOM,AVERAGETOPBOTTOM
+#CHIP BADROW1X1 xs1x1 xe1x1 y1x1 treatment (IGNORE,REPLACE) rxs1x1 rxe1x1 ry1x1
+#CHIP BADROW1X1 xs1x1 xe1x1 y1x1 treatment (AVERAGE) ry1x1_1 ry1x1_2 0
+#CHIP BADROW1X1 xs1x1 xe1x1 y1x1 treatment (REPLACETOP,REPLACEBOTTOM,AVERAGETOPBOTTOM) 0 0 0
+#CHIP BADROW1X1 801 1023 20 REPLACE 801 1023 22
+#CHIP BADROW2X2 treatment options: IGNORE,REPLACE,AVERAGE,REPLACETOP,REPLACEBOTTOM,AVERAGETOPBOTTOM
+#CHIP BADROW2X2 xs2x2 xe2x2 y2x2 treatment (IGNORE,REPLACE) rxs2x2 rxe2x2 ry2x2
+#CHIP BADROW2X2 xs2x2 xe2x2 y2x2 treatment (AVERAGE) ry2x2_1 ry2x2_2 0
+#CHIP BADROW2X2 xs2x2 xe2x2 y2x2 treatment (REPLACETOP,REPLACEBOTTOM,AVERAGETOPBOTTOM) 0 0 0
+#CHIP BADROW2X2 401 502 10 REPLACE 401 502 11
+#CHIP BADROW4X4 treatment options: IGNORE,REPLACE,AVERAGE,REPLACETOP,REPLACEBOTTOM,AVERAGETOPBOTTOM
+#CHIP BADROW4X4 xs4x4 xe4x4 y4x4 treatment (IGNORE,REPLACE) rxs4x4 rxe4x4 ry4x4
+#CHIP BADROW4X4 xs4x4 xe4x4 y4x4 treatment (AVERAGE) ry4x4_1 ry4x4_2 0
+#CHIP BADROW4X4 xs4x4 xe4x4 y4x4 treatment (REPLACETOP,REPLACEBOTTOM,AVERAGETOPBOTTOM) 0 0 0
+#CHIP BADROW4X4 200 205 5 REPLACE 200 205 6
+#CHIP BADCOL treatment options: IGNORE,REPLACE,AVERAGE,REPLACELEFT,REPLACERIGHT,AVERAGELEFTRIGHT
+#CHIP BADCOL x1x1 ys1x1 ye1x1 treatment (IGNORE,REPLACE) rx1x1 rsy1x1 rey1x1
+#CHIP BADCOL x1x1 ys1x1 ye1x1 treatment (AVERAGE) rx1x1_1 rx1x1_2 0
+#CHIP BADCOL x1x1 ys1x1 ye1x1 treatment (REPLACELEFT,REPLACERIGHT,AVERAGELEFTRIGHT) 0 0 0
+#CHIP BADCOL 20 801 1023 REPLACE 22 801 1023
+#CHIP BADCOL1X1 treatment options: IGNORE,REPLACE,AVERAGE,REPLACELEFT,REPLACERIGHT,AVERAGELEFTRIGHT
+#CHIP BADCOL1X1 x1x1 ys1x1 ye1x1 treatment (IGNORE,REPLACE) rx1x1 rsy1x1 rey1x1
+#CHIP BADCOL1X1 x1x1 ys1x1 ye1x1 treatment (AVERAGE) rx1x1_1 rx1x1_2 0
+#CHIP BADCOL1X1 x1x1 ys1x1 ye1x1 treatment (REPLACELEFT,REPLACERIGHT,AVERAGELEFTRIGHT) 0 0 0
+#CHIP BADCOL1X1 20 801 1023 REPLACE 22 801 1023
+#CHIP BADCOL1X1 1780 1010 2047 REPLACELEFT 0 0 0
+#CHIP BADCOL1X1 1781 1010 2047 REPLACERIGHT 0 0 0
+#CHIP BADCOL1X1 2043 0 1023 AVERAGELEFTRIGHT 0 0 0
+#CHIP BADCOL2X2 treatment options: IGNORE,REPLACE,AVERAGE,REPLACELEFT,REPLACERIGHT,AVERAGELEFTRIGHT
+#CHIP BADCOL2X2 x2x2 ys2x2 ye2x2 treatment (IGNORE,REPLACE) rx2x2 rsy2x2 rey2x2
+#CHIP BADCOL2X2 x2x2 ys2x2 ye2x2 treatment (AVERAGE) rx2x2_1 rx2x2_2 0
+#CHIP BADCOL2X2 x2x2 ys2x2 ye2x2 treatment (REPLACELEFT,REPLACERIGHT,AVERAGELEFTRIGHT) 0 0 0
+#CHIP BADCOL2X2 10 401 502 REPLACE 11 401 502
+#CHIP BADCOL2X2 442 500 1023 AVERAGELEFTRIGHT 0 0 0
+#CHIP BADCOL2X2 890 500 1023 AVERAGELEFTRIGHT 0 0 0
+#CHIP BADCOL2X2 1021 0 511 AVERAGELEFTRIGHT 0 0 0
+#CHIP BADCOL4X4 treatment options: IGNORE,REPLACE,AVERAGE,REPLACELEFT,REPLACERIGHT,AVERAGELEFTRIGHT
+#CHIP BADCOL4X4 x4x4 ys4x4 ye4x4 treatment (IGNORE,REPLACE) rx4x4 rsy4x4 rey4x4
+#CHIP BADCOL4X4 x4x4 ys4x4 ye4x4 treatment (AVERAGE) rx4x4_1 rx4x4_2 0
+#CHIP BADCOL4X4 x4x4 ys4x4 ye4x4 treatment (REPLACELEFT,REPLACERIGHT,AVERAGELEFTRIGHT) 0 0 0
+#CHIP BADCOL4X4 5 200 205 REPLACE 6 200 205
+#CHIP BADCOL4X4 445 250 511 AVERAGELEFTRIGHT 0 0 0
+#CHIP BADCOL4X4 510 0 255 AVERAGELEFTRIGHT 0 0 0
+#CHIP FIP60ORIGIN x y
+#CHIP FIP60ORIGIN 16 12
+#CHIP CORNERMASK INFO: Use 0-based coordinates! The corners are recognized as follows:
+#left = x < xw/2;  right = x >= xw/2;  bottom = y < yw/2;  top = y >= yw/2
+#CHIP CORNERMASK n x1 y1 x2 y2 x3 y3 x4 y4
+#CHIP CORNERMASK 0  0 0  0 0  0 0  0 0
+#BAD POLYGON SUPPORT
+#CHIP GAINMO 240.00000
+#CHIP GAINCU 110.00000
+#MACHINEFUNCTION SUPPORT as derived by XX YLID
+#CHIP MACHINEFUNCTION A B
+#CHIP MACHINEFUNCTION 0 0
+#CHIP BADRECTANGLE xl xr yb yt
+CHIP BADRECTANGLE  195  211    0  980
+CHIP BADRECTANGLE  407  423    0  980
+CHIP BADRECTANGLE  619  635    0  980
+CHIP BADRECTANGLE  831  847    0  980
+CHIP BADRECTANGLE    0 1042  487  493
+CHIP BADRECTANGLE   46   46   43   43
+CHIP BADRECTANGLE   92   92   55   55
+CHIP BADRECTANGLE  450  450   69   69
+CHIP BADRECTANGLE  299  299  142  142
+CHIP BADRECTANGLE  222  222  160  160
+CHIP BADRECTANGLE 1030 1030  162  162
+CHIP BADRECTANGLE  789  789  208  208
+CHIP BADRECTANGLE  797  797  219  219
+CHIP BADRECTANGLE  943  943  269  269
+CHIP BADRECTANGLE  957  957  269  269
+CHIP BADRECTANGLE   29   29  434  434
+CHIP BADRECTANGLE  188  188  460  460
+CHIP BADRECTANGLE  175  175  478  478
+CHIP BADRECTANGLE  860  860  513  513
+CHIP BADRECTANGLE 1041 1041  515  515
+CHIP BADRECTANGLE   46   46  537  537
+CHIP BADRECTANGLE   92   92  549  549
+CHIP BADRECTANGLE   34   34  626  626
+CHIP BADRECTANGLE  570  570  641  641
+CHIP BADRECTANGLE  570  570  642  642
+CHIP BADRECTANGLE  894  894  699  699
+CHIP BADRECTANGLE  925  925  701  701
+CHIP BADRECTANGLE  793  793  704  704
+CHIP BADRECTANGLE  935  935  885  885
+CHIP BADRECTANGLE  941  941  888  888
+CHIP BADRECTANGLE  941  941  919  919
+CHIP BADRECTANGLE  941  941  920  920
+CHIP BADRECTANGLE  188  188  954  954
+CHIP BADRECTANGLE  175  175  972  972
+CHIP BADRECTANGLE 1042 1042  979  979
+CHIP BADRECTANGLE 1001 1001  980  980
+CHIP BADRECTANGLE 1042 1042  980  980
+#END OF XCALIBUR CHIP CHARACTERISTICS FILE
+"""
+
+setfile2M = """#XCALIBUR SYSTEM
+#XCALIBUR SETUP FILE
+#*******************************************************************************************************
+# CHIP CHARACTERISTICS e_19_020609.ccd         D A T E Wed-Sep-16-10-00-59-2009
+# This program produces version 1.9
+#******************************************************************************************************
+#THIS FILE IS USER READABLE - BUT SHOULD NOT BE TOUCHED BY THE USER
+#ANY CHANGES TO THIS FILE WILL RESULT IN LOSS OF WARRANTY!
+#WATCH OUT: THE REPLACE PIXEL HAS TO 1X1,2X2,4x4 BINNING COMPATIBLE!
+#NOTE: THE FUNCTIONS BADCOL1X1,BADCOL2X2,BADCOL4X4 ARE ONLY USED IN THEIR RESPECTIVE BINNINGS AND HAVE TO BE COMPATIBLE WITH THEM!
+#CHIP IDCODE producer type serial
+CHIP IDCODE "n/a" "n/a" "n/a"
+#CHIP TAPER producer type serial
+CHIP TAPER "" "" ""
+#CHIP SCINTILLATORID id
+#id: 1=GREEN400; 2=40; 3=60; 4=100; 5=MED; 6=FINE; 7=GREEN400_NEW
+#CHIP SCINTILLATORID 1
+#ALL COORDINATES GO FROM 0 TO N-1
+#CHIP BADPOINT treatment options: IGNORE,REPLACE,AVERAGE
+#CHIP BADPOINT x1x1 y1x1 treatment r1x1x1 r1y1x1 r2x1x1 r2y1x1
+#CHIP BADPOINT 630 422 REPLACE 632 422 0 0
+#CHIP BADROW treatment options: IGNORE,REPLACE
+#CHIP BADROW xs1x1 xe1x1 y1x1 treatment rxs1x1 rxe1x1 ry1x1
+#CHIP BADROW 800 1023 20 REPLACE 800 1023 19
+#CHIP BADROW1X1 treatment options: IGNORE,REPLACE,AVERAGE,REPLACETOP,REPLACEBOTTOM,AVERAGETOPBOTTOM
+#CHIP BADROW1X1 xs1x1 xe1x1 y1x1 treatment (IGNORE,REPLACE) rxs1x1 rxe1x1 ry1x1
+#CHIP BADROW1X1 xs1x1 xe1x1 y1x1 treatment (AVERAGE) ry1x1_1 ry1x1_2 0
+#CHIP BADROW1X1 xs1x1 xe1x1 y1x1 treatment (REPLACETOP,REPLACEBOTTOM,AVERAGETOPBOTTOM) 0 0 0
+#CHIP BADROW1X1 801 1023 20 REPLACE 801 1023 22
+#CHIP BADROW2X2 treatment options: IGNORE,REPLACE,AVERAGE,REPLACETOP,REPLACEBOTTOM,AVERAGETOPBOTTOM
+#CHIP BADROW2X2 xs2x2 xe2x2 y2x2 treatment (IGNORE,REPLACE) rxs2x2 rxe2x2 ry2x2
+#CHIP BADROW2X2 xs2x2 xe2x2 y2x2 treatment (AVERAGE) ry2x2_1 ry2x2_2 0
+#CHIP BADROW2X2 xs2x2 xe2x2 y2x2 treatment (REPLACETOP,REPLACEBOTTOM,AVERAGETOPBOTTOM) 0 0 0
+#CHIP BADROW2X2 401 502 10 REPLACE 401 502 11
+#CHIP BADROW4X4 treatment options: IGNORE,REPLACE,AVERAGE,REPLACETOP,REPLACEBOTTOM,AVERAGETOPBOTTOM
+#CHIP BADROW4X4 xs4x4 xe4x4 y4x4 treatment (IGNORE,REPLACE) rxs4x4 rxe4x4 ry4x4
+#CHIP BADROW4X4 xs4x4 xe4x4 y4x4 treatment (AVERAGE) ry4x4_1 ry4x4_2 0
+#CHIP BADROW4X4 xs4x4 xe4x4 y4x4 treatment (REPLACETOP,REPLACEBOTTOM,AVERAGETOPBOTTOM) 0 0 0
+#CHIP BADROW4X4 200 205 5 REPLACE 200 205 6
+#CHIP BADCOL treatment options: IGNORE,REPLACE,AVERAGE,REPLACELEFT,REPLACERIGHT,AVERAGELEFTRIGHT
+#CHIP BADCOL x1x1 ys1x1 ye1x1 treatment (IGNORE,REPLACE) rx1x1 rsy1x1 rey1x1
+#CHIP BADCOL x1x1 ys1x1 ye1x1 treatment (AVERAGE) rx1x1_1 rx1x1_2 0
+#CHIP BADCOL x1x1 ys1x1 ye1x1 treatment (REPLACELEFT,REPLACERIGHT,AVERAGELEFTRIGHT) 0 0 0
+#CHIP BADCOL 20 801 1023 REPLACE 22 801 1023
+#CHIP BADCOL1X1 treatment options: IGNORE,REPLACE,AVERAGE,REPLACELEFT,REPLACERIGHT,AVERAGELEFTRIGHT
+#CHIP BADCOL1X1 x1x1 ys1x1 ye1x1 treatment (IGNORE,REPLACE) rx1x1 rsy1x1 rey1x1
+#CHIP BADCOL1X1 x1x1 ys1x1 ye1x1 treatment (AVERAGE) rx1x1_1 rx1x1_2 0
+#CHIP BADCOL1X1 x1x1 ys1x1 ye1x1 treatment (REPLACELEFT,REPLACERIGHT,AVERAGELEFTRIGHT) 0 0 0
+#CHIP BADCOL1X1 20 801 1023 REPLACE 22 801 1023
+#CHIP BADCOL1X1 1780 1010 2047 REPLACELEFT 0 0 0
+#CHIP BADCOL1X1 1781 1010 2047 REPLACERIGHT 0 0 0
+#CHIP BADCOL1X1 2043 0 1023 AVERAGELEFTRIGHT 0 0 0
+#CHIP BADCOL2X2 treatment options: IGNORE,REPLACE,AVERAGE,REPLACELEFT,REPLACERIGHT,AVERAGELEFTRIGHT
+#CHIP BADCOL2X2 x2x2 ys2x2 ye2x2 treatment (IGNORE,REPLACE) rx2x2 rsy2x2 rey2x2
+#CHIP BADCOL2X2 x2x2 ys2x2 ye2x2 treatment (AVERAGE) rx2x2_1 rx2x2_2 0
+#CHIP BADCOL2X2 x2x2 ys2x2 ye2x2 treatment (REPLACELEFT,REPLACERIGHT,AVERAGELEFTRIGHT) 0 0 0
+#CHIP BADCOL2X2 10 401 502 REPLACE 11 401 502
+#CHIP BADCOL2X2 442 500 1023 AVERAGELEFTRIGHT 0 0 0
+#CHIP BADCOL2X2 890 500 1023 AVERAGELEFTRIGHT 0 0 0
+#CHIP BADCOL2X2 1021 0 511 AVERAGELEFTRIGHT 0 0 0
+#CHIP BADCOL4X4 treatment options: IGNORE,REPLACE,AVERAGE,REPLACELEFT,REPLACERIGHT,AVERAGELEFTRIGHT
+#CHIP BADCOL4X4 x4x4 ys4x4 ye4x4 treatment (IGNORE,REPLACE) rx4x4 rsy4x4 rey4x4
+#CHIP BADCOL4X4 x4x4 ys4x4 ye4x4 treatment (AVERAGE) rx4x4_1 rx4x4_2 0
+#CHIP BADCOL4X4 x4x4 ys4x4 ye4x4 treatment (REPLACELEFT,REPLACERIGHT,AVERAGELEFTRIGHT) 0 0 0
+#CHIP BADCOL4X4 5 200 205 REPLACE 6 200 205
+#CHIP BADCOL4X4 445 250 511 AVERAGELEFTRIGHT 0 0 0
+#CHIP BADCOL4X4 510 0 255 AVERAGELEFTRIGHT 0 0 0
+#CHIP FIP60ORIGIN x y
+#CHIP FIP60ORIGIN 16 12
+#CHIP CORNERMASK INFO: Use 0-based coordinates! The corners are recognized as follows:
+#left = x < xw/2;  right = x >= xw/2;  bottom = y < yw/2;  top = y >= yw/2
+#CHIP CORNERMASK n x1 y1 x2 y2 x3 y3 x4 y4
+#CHIP CORNERMASK 0  0 0  0 0  0 0  0 0
+#BAD POLYGON SUPPORT
+#CHIP GAINMO 240.00000
+#CHIP GAINCU 110.00000
+#MACHINEFUNCTION SUPPORT as derived by XX YLID
+#CHIP MACHINEFUNCTION A B
+#CHIP MACHINEFUNCTION 0 0
+#CHIP BADRECTANGLE xl xr yb yt
+CHIP BADRECTANGLE  195  212    0 1474
+CHIP BADRECTANGLE  407  424    0 1474
+CHIP BADRECTANGLE  619  636    0 1474
+CHIP BADRECTANGLE  831  848    0 1474
+CHIP BADRECTANGLE 1043 1060    0 1474
+CHIP BADRECTANGLE 1255 1272    0 1474
+CHIP BADRECTANGLE 1467 1484    0 1474
+CHIP BADRECTANGLE    0 1678  487  494
+CHIP BADRECTANGLE    0 1678  981  988
+CHIP BADRECTANGLE 1452 1452   10   10
+CHIP BADRECTANGLE 1660 1660   83   83
+CHIP BADRECTANGLE  188  188   88   88
+CHIP BADRECTANGLE  188  188   89   89
+CHIP BADRECTANGLE 1644 1644  147  147
+CHIP BADRECTANGLE 1641 1641  155  155
+CHIP BADRECTANGLE 1642 1642  155  155
+CHIP BADRECTANGLE 1557 1557  190  190
+CHIP BADRECTANGLE 1558 1558  190  190
+CHIP BADRECTANGLE 1559 1559  190  190
+CHIP BADRECTANGLE 1557 1557  191  191
+CHIP BADRECTANGLE 1558 1558  191  191
+CHIP BADRECTANGLE 1559 1559  191  191
+CHIP BADRECTANGLE 1560 1560  191  191
+CHIP BADRECTANGLE 1558 1558  192  192
+CHIP BADRECTANGLE 1559 1559  192  192
+CHIP BADRECTANGLE 1560 1560  192  192
+CHIP BADRECTANGLE  217  217  232  232
+CHIP BADRECTANGLE   90   90  233  233
+CHIP BADRECTANGLE   91   91  233  233
+CHIP BADRECTANGLE   92   92  233  233
+CHIP BADRECTANGLE   90   90  234  234
+CHIP BADRECTANGLE   91   91  234  234
+CHIP BADRECTANGLE   92   92  234  234
+CHIP BADRECTANGLE   90   90  235  235
+CHIP BADRECTANGLE   91   91  235  235
+CHIP BADRECTANGLE   92   92  235  235
+CHIP BADRECTANGLE  765  765  250  250
+CHIP BADRECTANGLE 1311 1311  267  267
+CHIP BADRECTANGLE 1312 1312  267  267
+CHIP BADRECTANGLE 1310 1310  268  268
+CHIP BADRECTANGLE 1311 1311  268  268
+CHIP BADRECTANGLE 1312 1312  268  268
+CHIP BADRECTANGLE 1310 1310  269  269
+CHIP BADRECTANGLE 1311 1311  269  269
+CHIP BADRECTANGLE 1312 1312  269  269
+CHIP BADRECTANGLE  213  213  322  322
+CHIP BADRECTANGLE 1334 1334  355  355
+CHIP BADRECTANGLE 1333 1333  356  356
+CHIP BADRECTANGLE 1335 1335  356  356
+CHIP BADRECTANGLE 1334 1334  357  357
+CHIP BADRECTANGLE 1613 1613  447  447
+CHIP BADRECTANGLE 1615 1615  448  448
+CHIP BADRECTANGLE  939  939  452  452
+CHIP BADRECTANGLE  227  227  486  486
+CHIP BADRECTANGLE  830  830  486  486
+CHIP BADRECTANGLE  848  848  486  486
+CHIP BADRECTANGLE 1042 1042  486  486
+CHIP BADRECTANGLE 1060 1060  486  486
+CHIP BADRECTANGLE 1254 1254  486  486
+CHIP BADRECTANGLE  618  618  494  494
+CHIP BADRECTANGLE  830  830  494  494
+CHIP BADRECTANGLE  848  848  494  494
+CHIP BADRECTANGLE 1042 1042  494  494
+CHIP BADRECTANGLE 1060 1060  494  494
+CHIP BADRECTANGLE 1254 1254  494  494
+CHIP BADRECTANGLE 1636 1636  587  587
+CHIP BADRECTANGLE    0    0  624  624
+CHIP BADRECTANGLE    1    1  624  624
+CHIP BADRECTANGLE    2    2  624  624
+CHIP BADRECTANGLE    0    0  625  625
+CHIP BADRECTANGLE    1    1  625  625
+CHIP BADRECTANGLE    2    2  625  625
+CHIP BADRECTANGLE    3    3  625  625
+CHIP BADRECTANGLE    0    0  626  626
+CHIP BADRECTANGLE    1    1  626  626
+CHIP BADRECTANGLE    2    2  626  626
+CHIP BADRECTANGLE    3    3  626  626
+CHIP BADRECTANGLE    0    0  627  627
+CHIP BADRECTANGLE    1    1  627  627
+CHIP BADRECTANGLE    2    2  627  627
+CHIP BADRECTANGLE  756  756  635  635
+CHIP BADRECTANGLE 1505 1505  638  638
+CHIP BADRECTANGLE 1506 1506  638  638
+CHIP BADRECTANGLE 1505 1505  639  639
+CHIP BADRECTANGLE 1506 1506  639  639
+CHIP BADRECTANGLE  664  664  746  746
+CHIP BADRECTANGLE  661  661  748  748
+CHIP BADRECTANGLE  662  662  749  749
+CHIP BADRECTANGLE  663  663  749  749
+CHIP BADRECTANGLE 1296 1296  846  846
+CHIP BADRECTANGLE 1297 1297  846  846
+CHIP BADRECTANGLE 1296 1296  847  847
+CHIP BADRECTANGLE  613  613  859  859
+CHIP BADRECTANGLE  613  613  860  860
+CHIP BADRECTANGLE  167  167  869  869
+CHIP BADRECTANGLE  403  403  889  889
+CHIP BADRECTANGLE  222  222  924  924
+CHIP BADRECTANGLE  953  953  943  943
+CHIP BADRECTANGLE  424  424  980  980
+CHIP BADRECTANGLE  830  830  980  980
+CHIP BADRECTANGLE  848  848  980  980
+CHIP BADRECTANGLE 1042 1042  980  980
+CHIP BADRECTANGLE 1060 1060  980  980
+CHIP BADRECTANGLE 1254 1254  980  980
+CHIP BADRECTANGLE 1272 1272  980  980
+CHIP BADRECTANGLE 1484 1484  980  980
+CHIP BADRECTANGLE  636  636  988  988
+CHIP BADRECTANGLE  830  830  988  988
+CHIP BADRECTANGLE  848  848  988  988
+CHIP BADRECTANGLE 1042 1042  988  988
+CHIP BADRECTANGLE 1060 1060  988  988
+CHIP BADRECTANGLE 1272 1272  988  988
+CHIP BADRECTANGLE 1388 1388  993  993
+CHIP BADRECTANGLE   75   75  994  994
+CHIP BADRECTANGLE   76   76  994  994
+CHIP BADRECTANGLE 1139 1139 1064 1064
+CHIP BADRECTANGLE 1139 1139 1065 1065
+CHIP BADRECTANGLE 1140 1140 1066 1066
+CHIP BADRECTANGLE 1141 1141 1066 1066
+CHIP BADRECTANGLE 1587 1587 1077 1077
+CHIP BADRECTANGLE 1586 1586 1079 1079
+CHIP BADRECTANGLE 1585 1585 1081 1081
+CHIP BADRECTANGLE  968  968 1123 1123
+CHIP BADRECTANGLE  402  402 1131 1131
+CHIP BADRECTANGLE  402  402 1132 1132
+CHIP BADRECTANGLE 1365 1365 1151 1151
+CHIP BADRECTANGLE  114  114 1174 1174
+CHIP BADRECTANGLE  114  114 1175 1175
+CHIP BADRECTANGLE 1459 1459 1184 1184
+CHIP BADRECTANGLE  510  510 1196 1196
+CHIP BADRECTANGLE 1581 1581 1208 1208
+CHIP BADRECTANGLE 1582 1582 1208 1208
+CHIP BADRECTANGLE 1581 1581 1212 1212
+CHIP BADRECTANGLE 1582 1582 1212 1212
+CHIP BADRECTANGLE   50   50 1222 1222
+CHIP BADRECTANGLE   51   51 1222 1222
+CHIP BADRECTANGLE 1581 1581 1222 1222
+CHIP BADRECTANGLE 1582 1582 1222 1222
+CHIP BADRECTANGLE   49   49 1223 1223
+CHIP BADRECTANGLE   50   50 1223 1223
+CHIP BADRECTANGLE   51   51 1223 1223
+CHIP BADRECTANGLE   52   52 1223 1223
+CHIP BADRECTANGLE   49   49 1224 1224
+CHIP BADRECTANGLE   50   50 1224 1224
+CHIP BADRECTANGLE   51   51 1224 1224
+CHIP BADRECTANGLE   52   52 1224 1224
+CHIP BADRECTANGLE   50   50 1225 1225
+CHIP BADRECTANGLE   51   51 1225 1225
+CHIP BADRECTANGLE  307  307 1231 1231
+CHIP BADRECTANGLE  308  308 1231 1231
+CHIP BADRECTANGLE  309  309 1231 1231
+CHIP BADRECTANGLE  307  307 1232 1232
+CHIP BADRECTANGLE  308  308 1232 1232
+CHIP BADRECTANGLE  309  309 1232 1232
+CHIP BADRECTANGLE 1617 1617 1284 1284
+CHIP BADRECTANGLE 1618 1618 1284 1284
+CHIP BADRECTANGLE 1619 1619 1284 1284
+CHIP BADRECTANGLE 1616 1616 1285 1285
+CHIP BADRECTANGLE 1617 1617 1285 1285
+CHIP BADRECTANGLE 1618 1618 1285 1285
+CHIP BADRECTANGLE 1619 1619 1285 1285
+CHIP BADRECTANGLE 1620 1620 1285 1285
+CHIP BADRECTANGLE 1658 1658 1285 1285
+CHIP BADRECTANGLE 1616 1616 1286 1286
+CHIP BADRECTANGLE 1617 1617 1286 1286
+CHIP BADRECTANGLE 1618 1618 1286 1286
+CHIP BADRECTANGLE 1619 1619 1286 1286
+CHIP BADRECTANGLE 1617 1617 1287 1287
+CHIP BADRECTANGLE 1618 1618 1287 1287
+CHIP BADRECTANGLE 1619 1619 1287 1287
+CHIP BADRECTANGLE 1355 1355 1290 1290
+CHIP BADRECTANGLE 1356 1356 1290 1290
+CHIP BADRECTANGLE 1357 1357 1290 1290
+CHIP BADRECTANGLE 1355 1355 1291 1291
+CHIP BADRECTANGLE 1356 1356 1291 1291
+CHIP BADRECTANGLE 1357 1357 1291 1291
+CHIP BADRECTANGLE 1355 1355 1292 1292
+CHIP BADRECTANGLE 1356 1356 1292 1292
+CHIP BADRECTANGLE 1357 1357 1292 1292
+CHIP BADRECTANGLE 1224 1224 1334 1334
+CHIP BADRECTANGLE 1500 1500 1334 1334
+CHIP BADRECTANGLE 1273 1273 1347 1347
+CHIP BADRECTANGLE  487  487 1349 1349
+CHIP BADRECTANGLE 1341 1341 1363 1363
+CHIP BADRECTANGLE 1342 1342 1363 1363
+CHIP BADRECTANGLE 1343 1343 1364 1364
+CHIP BADRECTANGLE 1340 1340 1365 1365
+CHIP BADRECTANGLE 1343 1343 1365 1365
+CHIP BADRECTANGLE 1340 1340 1366 1366
+CHIP BADRECTANGLE 1342 1342 1366 1366
+CHIP BADRECTANGLE  108  108 1367 1367
+CHIP BADRECTANGLE 1340 1340 1367 1367
+CHIP BADRECTANGLE 1341 1341 1367 1367
+#END OF XCALIBUR CHIP CHARACTERISTICS FILE
+"""
+
+setfile300K = """#XCALIBUR SYSTEM
+#XCALIBUR SETUP FILE
+#*******************************************************************************************************
+# CHIP CHARACTERISTICS e_19_020609.ccd         D A T E Wed-Sep-16-10-00-59-2009
+# This program produces version 1.9
+#******************************************************************************************************
+#THIS FILE IS USER READABLE - BUT SHOULD NOT BE TOUCHED BY THE USER
+#ANY CHANGES TO THIS FILE WILL RESULT IN LOSS OF WARRANTY!
+#WATCH OUT: THE REPLACE PIXEL HAS TO 1X1,2X2,4x4 BINNING COMPATIBLE!
+#NOTE: THE FUNCTIONS BADCOL1X1,BADCOL2X2,BADCOL4X4 ARE ONLY USED IN THEIR RESPECTIVE BINNINGS AND HAVE TO BE COMPATIBLE WITH THEM!
+#CHIP IDCODE producer type serial
+CHIP IDCODE "n/a" "n/a" "n/a"
+#CHIP TAPER producer type serial
+CHIP TAPER "" "" ""
+#CHIP SCINTILLATORID id
+#id: 1=GREEN400; 2=40; 3=60; 4=100; 5=MED; 6=FINE; 7=GREEN400_NEW
+#CHIP SCINTILLATORID 1
+#ALL COORDINATES GO FROM 0 TO N-1
+#CHIP BADPOINT treatment options: IGNORE,REPLACE,AVERAGE
+#CHIP BADPOINT x1x1 y1x1 treatment r1x1x1 r1y1x1 r2x1x1 r2y1x1
+#CHIP BADPOINT 630 422 REPLACE 632 422 0 0
+#CHIP BADROW treatment options: IGNORE,REPLACE
+#CHIP BADROW xs1x1 xe1x1 y1x1 treatment rxs1x1 rxe1x1 ry1x1
+#CHIP BADROW 800 1023 20 REPLACE 800 1023 19
+#CHIP BADROW1X1 treatment options: IGNORE,REPLACE,AVERAGE,REPLACETOP,REPLACEBOTTOM,AVERAGETOPBOTTOM
+#CHIP BADROW1X1 xs1x1 xe1x1 y1x1 treatment (IGNORE,REPLACE) rxs1x1 rxe1x1 ry1x1
+#CHIP BADROW1X1 xs1x1 xe1x1 y1x1 treatment (AVERAGE) ry1x1_1 ry1x1_2 0
+#CHIP BADROW1X1 xs1x1 xe1x1 y1x1 treatment (REPLACETOP,REPLACEBOTTOM,AVERAGETOPBOTTOM) 0 0 0
+#CHIP BADROW1X1 801 1023 20 REPLACE 801 1023 22
+#CHIP BADROW2X2 treatment options: IGNORE,REPLACE,AVERAGE,REPLACETOP,REPLACEBOTTOM,AVERAGETOPBOTTOM
+#CHIP BADROW2X2 xs2x2 xe2x2 y2x2 treatment (IGNORE,REPLACE) rxs2x2 rxe2x2 ry2x2
+#CHIP BADROW2X2 xs2x2 xe2x2 y2x2 treatment (AVERAGE) ry2x2_1 ry2x2_2 0
+#CHIP BADROW2X2 xs2x2 xe2x2 y2x2 treatment (REPLACETOP,REPLACEBOTTOM,AVERAGETOPBOTTOM) 0 0 0
+#CHIP BADROW2X2 401 502 10 REPLACE 401 502 11
+#CHIP BADROW4X4 treatment options: IGNORE,REPLACE,AVERAGE,REPLACETOP,REPLACEBOTTOM,AVERAGETOPBOTTOM
+#CHIP BADROW4X4 xs4x4 xe4x4 y4x4 treatment (IGNORE,REPLACE) rxs4x4 rxe4x4 ry4x4
+#CHIP BADROW4X4 xs4x4 xe4x4 y4x4 treatment (AVERAGE) ry4x4_1 ry4x4_2 0
+#CHIP BADROW4X4 xs4x4 xe4x4 y4x4 treatment (REPLACETOP,REPLACEBOTTOM,AVERAGETOPBOTTOM) 0 0 0
+#CHIP BADROW4X4 200 205 5 REPLACE 200 205 6
+#CHIP BADCOL treatment options: IGNORE,REPLACE,AVERAGE,REPLACELEFT,REPLACERIGHT,AVERAGELEFTRIGHT
+#CHIP BADCOL x1x1 ys1x1 ye1x1 treatment (IGNORE,REPLACE) rx1x1 rsy1x1 rey1x1
+#CHIP BADCOL x1x1 ys1x1 ye1x1 treatment (AVERAGE) rx1x1_1 rx1x1_2 0
+#CHIP BADCOL x1x1 ys1x1 ye1x1 treatment (REPLACELEFT,REPLACERIGHT,AVERAGELEFTRIGHT) 0 0 0
+#CHIP BADCOL 20 801 1023 REPLACE 22 801 1023
+#CHIP BADCOL1X1 treatment options: IGNORE,REPLACE,AVERAGE,REPLACELEFT,REPLACERIGHT,AVERAGELEFTRIGHT
+#CHIP BADCOL1X1 x1x1 ys1x1 ye1x1 treatment (IGNORE,REPLACE) rx1x1 rsy1x1 rey1x1
+#CHIP BADCOL1X1 x1x1 ys1x1 ye1x1 treatment (AVERAGE) rx1x1_1 rx1x1_2 0
+#CHIP BADCOL1X1 x1x1 ys1x1 ye1x1 treatment (REPLACELEFT,REPLACERIGHT,AVERAGELEFTRIGHT) 0 0 0
+#CHIP BADCOL1X1 20 801 1023 REPLACE 22 801 1023
+#CHIP BADCOL1X1 1780 1010 2047 REPLACELEFT 0 0 0
+#CHIP BADCOL1X1 1781 1010 2047 REPLACERIGHT 0 0 0
+#CHIP BADCOL1X1 2043 0 1023 AVERAGELEFTRIGHT 0 0 0
+#CHIP BADCOL2X2 treatment options: IGNORE,REPLACE,AVERAGE,REPLACELEFT,REPLACERIGHT,AVERAGELEFTRIGHT
+#CHIP BADCOL2X2 x2x2 ys2x2 ye2x2 treatment (IGNORE,REPLACE) rx2x2 rsy2x2 rey2x2
+#CHIP BADCOL2X2 x2x2 ys2x2 ye2x2 treatment (AVERAGE) rx2x2_1 rx2x2_2 0
+#CHIP BADCOL2X2 x2x2 ys2x2 ye2x2 treatment (REPLACELEFT,REPLACERIGHT,AVERAGELEFTRIGHT) 0 0 0
+#CHIP BADCOL2X2 10 401 502 REPLACE 11 401 502
+#CHIP BADCOL2X2 442 500 1023 AVERAGELEFTRIGHT 0 0 0
+#CHIP BADCOL2X2 890 500 1023 AVERAGELEFTRIGHT 0 0 0
+#CHIP BADCOL2X2 1021 0 511 AVERAGELEFTRIGHT 0 0 0
+#CHIP BADCOL4X4 treatment options: IGNORE,REPLACE,AVERAGE,REPLACELEFT,REPLACERIGHT,AVERAGELEFTRIGHT
+#CHIP BADCOL4X4 x4x4 ys4x4 ye4x4 treatment (IGNORE,REPLACE) rx4x4 rsy4x4 rey4x4
+#CHIP BADCOL4X4 x4x4 ys4x4 ye4x4 treatment (AVERAGE) rx4x4_1 rx4x4_2 0
+#CHIP BADCOL4X4 x4x4 ys4x4 ye4x4 treatment (REPLACELEFT,REPLACERIGHT,AVERAGELEFTRIGHT) 0 0 0
+#CHIP BADCOL4X4 5 200 205 REPLACE 6 200 205
+#CHIP BADCOL4X4 445 250 511 AVERAGELEFTRIGHT 0 0 0
+#CHIP BADCOL4X4 510 0 255 AVERAGELEFTRIGHT 0 0 0
+#CHIP FIP60ORIGIN x y
+#CHIP FIP60ORIGIN 16 12
+#CHIP CORNERMASK INFO: Use 0-based coordinates! The corners are recognized as follows:
+#left = x < xw/2;  right = x >= xw/2;  bottom = y < yw/2;  top = y >= yw/2
+#CHIP CORNERMASK n x1 y1 x2 y2 x3 y3 x4 y4
+#CHIP CORNERMASK 0  0 0  0 0  0 0  0 0
+#BAD POLYGON SUPPORT
+#CHIP GAINMO 240.00000
+#CHIP GAINCU 110.00000
+#MACHINEFUNCTION SUPPORT as derived by XX YLID
+#CHIP MACHINEFUNCTION A B
+#CHIP MACHINEFUNCTION 0 0
+#CHIP BADRECTANGLE xl xr yb yt
+CHIP BADRECTANGLE  195  212    0 619
+CHIP BADRECTANGLE  407  424    0 619
+CHIP BADRECTANGLE  487  619    0 619
+#END OF XCALIBUR CHIP CHARACTERISTICS FILE
+"""
+
+setfile6M = """#XCALIBUR SYSTEM
+#XCALIBUR SETUP FILE
+#*******************************************************************************************************
+# CHIP CHARACTERISTICS e_19_020609.ccd         D A T E Wed-Sep-16-10-00-59-2009
+# This program produces version 1.9
+#******************************************************************************************************
+#THIS FILE IS USER READABLE - BUT SHOULD NOT BE TOUCHED BY THE USER
+#ANY CHANGES TO THIS FILE WILL RESULT IN LOSS OF WARRANTY!
+#WATCH OUT: THE REPLACE PIXEL HAS TO 1X1,2X2,4x4 BINNING COMPATIBLE!
+#NOTE: THE FUNCTIONS BADCOL1X1,BADCOL2X2,BADCOL4X4 ARE ONLY USED IN THEIR RESPECTIVE BINNINGS AND HAVE TO BE COMPATIBLE WITH THEM!
+#CHIP IDCODE producer type serial
+CHIP IDCODE "n/a" "n/a" "n/a"
+#CHIP TAPER producer type serial
+CHIP TAPER "" "" ""
+#CHIP SCINTILLATORID id
+#id: 1=GREEN400; 2=40; 3=60; 4=100; 5=MED; 6=FINE; 7=GREEN400_NEW
+#CHIP SCINTILLATORID 1
+#ALL COORDINATES GO FROM 0 TO N-1
+#CHIP BADPOINT treatment options: IGNORE,REPLACE,AVERAGE
+#CHIP BADPOINT x1x1 y1x1 treatment r1x1x1 r1y1x1 r2x1x1 r2y1x1
+#CHIP BADPOINT 630 422 REPLACE 632 422 0 0
+#CHIP BADROW treatment options: IGNORE,REPLACE
+#CHIP BADROW xs1x1 xe1x1 y1x1 treatment rxs1x1 rxe1x1 ry1x1
+#CHIP BADROW 800 1023 20 REPLACE 800 1023 19
+#CHIP BADROW1X1 treatment options: IGNORE,REPLACE,AVERAGE,REPLACETOP,REPLACEBOTTOM,AVERAGETOPBOTTOM
+#CHIP BADROW1X1 xs1x1 xe1x1 y1x1 treatment (IGNORE,REPLACE) rxs1x1 rxe1x1 ry1x1
+#CHIP BADROW1X1 xs1x1 xe1x1 y1x1 treatment (AVERAGE) ry1x1_1 ry1x1_2 0
+#CHIP BADROW1X1 xs1x1 xe1x1 y1x1 treatment (REPLACETOP,REPLACEBOTTOM,AVERAGETOPBOTTOM) 0 0 0
+#CHIP BADROW1X1 801 1023 20 REPLACE 801 1023 22
+#CHIP BADROW2X2 treatment options: IGNORE,REPLACE,AVERAGE,REPLACETOP,REPLACEBOTTOM,AVERAGETOPBOTTOM
+#CHIP BADROW2X2 xs2x2 xe2x2 y2x2 treatment (IGNORE,REPLACE) rxs2x2 rxe2x2 ry2x2
+#CHIP BADROW2X2 xs2x2 xe2x2 y2x2 treatment (AVERAGE) ry2x2_1 ry2x2_2 0
+#CHIP BADROW2X2 xs2x2 xe2x2 y2x2 treatment (REPLACETOP,REPLACEBOTTOM,AVERAGETOPBOTTOM) 0 0 0
+#CHIP BADROW2X2 401 502 10 REPLACE 401 502 11
+#CHIP BADROW4X4 treatment options: IGNORE,REPLACE,AVERAGE,REPLACETOP,REPLACEBOTTOM,AVERAGETOPBOTTOM
+#CHIP BADROW4X4 xs4x4 xe4x4 y4x4 treatment (IGNORE,REPLACE) rxs4x4 rxe4x4 ry4x4
+#CHIP BADROW4X4 xs4x4 xe4x4 y4x4 treatment (AVERAGE) ry4x4_1 ry4x4_2 0
+#CHIP BADROW4X4 xs4x4 xe4x4 y4x4 treatment (REPLACETOP,REPLACEBOTTOM,AVERAGETOPBOTTOM) 0 0 0
+#CHIP BADROW4X4 200 205 5 REPLACE 200 205 6
+#CHIP BADCOL treatment options: IGNORE,REPLACE,AVERAGE,REPLACELEFT,REPLACERIGHT,AVERAGELEFTRIGHT
+#CHIP BADCOL x1x1 ys1x1 ye1x1 treatment (IGNORE,REPLACE) rx1x1 rsy1x1 rey1x1
+#CHIP BADCOL x1x1 ys1x1 ye1x1 treatment (AVERAGE) rx1x1_1 rx1x1_2 0
+#CHIP BADCOL x1x1 ys1x1 ye1x1 treatment (REPLACELEFT,REPLACERIGHT,AVERAGELEFTRIGHT) 0 0 0
+#CHIP BADCOL 20 801 1023 REPLACE 22 801 1023
+#CHIP BADCOL1X1 treatment options: IGNORE,REPLACE,AVERAGE,REPLACELEFT,REPLACERIGHT,AVERAGELEFTRIGHT
+#CHIP BADCOL1X1 x1x1 ys1x1 ye1x1 treatment (IGNORE,REPLACE) rx1x1 rsy1x1 rey1x1
+#CHIP BADCOL1X1 x1x1 ys1x1 ye1x1 treatment (AVERAGE) rx1x1_1 rx1x1_2 0
+#CHIP BADCOL1X1 x1x1 ys1x1 ye1x1 treatment (REPLACELEFT,REPLACERIGHT,AVERAGELEFTRIGHT) 0 0 0
+#CHIP BADCOL1X1 20 801 1023 REPLACE 22 801 1023
+#CHIP BADCOL1X1 1780 1010 2047 REPLACELEFT 0 0 0
+#CHIP BADCOL1X1 1781 1010 2047 REPLACERIGHT 0 0 0
+#CHIP BADCOL1X1 2043 0 1023 AVERAGELEFTRIGHT 0 0 0
+#CHIP BADCOL2X2 treatment options: IGNORE,REPLACE,AVERAGE,REPLACELEFT,REPLACERIGHT,AVERAGELEFTRIGHT
+#CHIP BADCOL2X2 x2x2 ys2x2 ye2x2 treatment (IGNORE,REPLACE) rx2x2 rsy2x2 rey2x2
+#CHIP BADCOL2X2 x2x2 ys2x2 ye2x2 treatment (AVERAGE) rx2x2_1 rx2x2_2 0
+#CHIP BADCOL2X2 x2x2 ys2x2 ye2x2 treatment (REPLACELEFT,REPLACERIGHT,AVERAGELEFTRIGHT) 0 0 0
+#CHIP BADCOL2X2 10 401 502 REPLACE 11 401 502
+#CHIP BADCOL2X2 442 500 1023 AVERAGELEFTRIGHT 0 0 0
+#CHIP BADCOL2X2 890 500 1023 AVERAGELEFTRIGHT 0 0 0
+#CHIP BADCOL2X2 1021 0 511 AVERAGELEFTRIGHT 0 0 0
+#CHIP BADCOL4X4 treatment options: IGNORE,REPLACE,AVERAGE,REPLACELEFT,REPLACERIGHT,AVERAGELEFTRIGHT
+#CHIP BADCOL4X4 x4x4 ys4x4 ye4x4 treatment (IGNORE,REPLACE) rx4x4 rsy4x4 rey4x4
+#CHIP BADCOL4X4 x4x4 ys4x4 ye4x4 treatment (AVERAGE) rx4x4_1 rx4x4_2 0
+#CHIP BADCOL4X4 x4x4 ys4x4 ye4x4 treatment (REPLACELEFT,REPLACERIGHT,AVERAGELEFTRIGHT) 0 0 0
+#CHIP BADCOL4X4 5 200 205 REPLACE 6 200 205
+#CHIP BADCOL4X4 445 250 511 AVERAGELEFTRIGHT 0 0 0
+#CHIP BADCOL4X4 510 0 255 AVERAGELEFTRIGHT 0 0 0
+#CHIP FIP60ORIGIN x y
+#CHIP FIP60ORIGIN 16 12
+#CHIP CORNERMASK INFO: Use 0-based coordinates! The corners are recognized as follows:
+#left = x < xw/2;  right = x >= xw/2;  bottom = y < yw/2;  top = y >= yw/2
+#CHIP CORNERMASK n x1 y1 x2 y2 x3 y3 x4 y4
+#CHIP CORNERMASK 0  0 0  0 0  0 0  0 0
+#BAD POLYGON SUPPORT
+#CHIP GAINMO 240.00000
+#CHIP GAINCU 110.00000
+#MACHINEFUNCTION SUPPORT as derived by XX YLID
+#CHIP MACHINEFUNCTION A B
+#CHIP MACHINEFUNCTION 0 0
+#CHIP BADRECTANGLE xl xr yb yt
+CHIP BADRECTANGLE  195  212    0 2462
+CHIP BADRECTANGLE  407  424    0 2462
+CHIP BADRECTANGLE  619  636    0 2462
+CHIP BADRECTANGLE  831  848    0 2462
+CHIP BADRECTANGLE 1043 1060    0 2462
+CHIP BADRECTANGLE 1255 1272    0 2462
+CHIP BADRECTANGLE 1467 1484    0 2462
+CHIP BADRECTANGLE 1679 1696    0 2462
+CHIP BADRECTANGLE 1891 1908    0 2462
+CHIP BADRECTANGLE 2103 2120    0 2462
+CHIP BADRECTANGLE 2315 2332    0 2462
+CHIP BADRECTANGLE    0 2526  487  494
+CHIP BADRECTANGLE    0 2526  981  988
+CHIP BADRECTANGLE    0 2526 1475 1482
+CHIP BADRECTANGLE    0 2526 1969 1976
+CHIP BADRECTANGLE  383  383    4    4
+CHIP BADRECTANGLE  384  384    4    4
+CHIP BADRECTANGLE  384  384    5    5
+CHIP BADRECTANGLE  452  452   59   59
+CHIP BADRECTANGLE  452  452   60   60
+CHIP BADRECTANGLE 2463 2463   72   72
+CHIP BADRECTANGLE  576  576  100  100
+CHIP BADRECTANGLE    0    0  119  119
+CHIP BADRECTANGLE    0    0  120  120
+CHIP BADRECTANGLE    0    0  121  121
+CHIP BADRECTANGLE 1816 1816  132  132
+CHIP BADRECTANGLE 1940 1940  145  145
+CHIP BADRECTANGLE  670  670  147  147
+CHIP BADRECTANGLE  671  671  147  147
+CHIP BADRECTANGLE    0    0  178  178
+CHIP BADRECTANGLE    0    0  179  179
+CHIP BADRECTANGLE    1    1  179  179
+CHIP BADRECTANGLE    0    0  180  180
+CHIP BADRECTANGLE    1    1  180  180
+CHIP BADRECTANGLE    0    0  181  181
+CHIP BADRECTANGLE    1    1  181  181
+CHIP BADRECTANGLE    0    0  182  182
+CHIP BADRECTANGLE    1    1  182  182
+CHIP BADRECTANGLE 1849 1849  182  182
+CHIP BADRECTANGLE    0    0  185  185
+CHIP BADRECTANGLE 2046 2046  232  232
+CHIP BADRECTANGLE    1    1  239  239
+CHIP BADRECTANGLE  854  854  239  239
+CHIP BADRECTANGLE    0    0  240  240
+CHIP BADRECTANGLE    1    1  240  240
+CHIP BADRECTANGLE    0    0  241  241
+CHIP BADRECTANGLE    1    1  241  241
+CHIP BADRECTANGLE    0    0  242  242
+CHIP BADRECTANGLE 2159 2159  242  242
+CHIP BADRECTANGLE 2179 2179  242  242
+CHIP BADRECTANGLE 2400 2400  242  242
+CHIP BADRECTANGLE 2419 2419  242  242
+CHIP BADRECTANGLE 2420 2420  242  242
+CHIP BADRECTANGLE 2425 2425  242  242
+CHIP BADRECTANGLE 2525 2525  242  242
+CHIP BADRECTANGLE    0    0  243  243
+CHIP BADRECTANGLE    1    1  243  243
+CHIP BADRECTANGLE 2159 2159  243  243
+CHIP BADRECTANGLE 2179 2179  243  243
+CHIP BADRECTANGLE 2183 2183  243  243
+CHIP BADRECTANGLE 2400 2400  243  243
+CHIP BADRECTANGLE 2419 2419  243  243
+CHIP BADRECTANGLE 2420 2420  243  243
+CHIP BADRECTANGLE 2425 2425  243  243
+CHIP BADRECTANGLE 2525 2525  243  243
+CHIP BADRECTANGLE    0    0  244  244
+CHIP BADRECTANGLE    1    1  244  244
+CHIP BADRECTANGLE 2179 2179  244  244
+CHIP BADRECTANGLE 2183 2183  244  244
+CHIP BADRECTANGLE    0    0  245  245
+CHIP BADRECTANGLE    0    0  246  246
+CHIP BADRECTANGLE    1    1  246  246
+CHIP BADRECTANGLE    0    0  247  247
+CHIP BADRECTANGLE    1    1  247  247
+CHIP BADRECTANGLE    0    0  248  248
+CHIP BADRECTANGLE    0    0  249  249
+CHIP BADRECTANGLE  926  926  250  250
+CHIP BADRECTANGLE 1658 1658  254  254
+CHIP BADRECTANGLE 2525 2525  302  302
+CHIP BADRECTANGLE 2526 2526  302  302
+CHIP BADRECTANGLE 1864 1864  303  303
+CHIP BADRECTANGLE 1868 1868  303  303
+CHIP BADRECTANGLE 1875 1875  303  303
+CHIP BADRECTANGLE 2427 2427  303  303
+CHIP BADRECTANGLE 2474 2474  303  303
+CHIP BADRECTANGLE 2520 2520  303  303
+CHIP BADRECTANGLE 2525 2525  303  303
+CHIP BADRECTANGLE 1864 1864  304  304
+CHIP BADRECTANGLE 1868 1868  304  304
+CHIP BADRECTANGLE 1875 1875  304  304
+CHIP BADRECTANGLE 2427 2427  304  304
+CHIP BADRECTANGLE 2474 2474  304  304
+CHIP BADRECTANGLE 2520 2520  304  304
+CHIP BADRECTANGLE 2525 2525  304  304
+CHIP BADRECTANGLE  907  907  308  308
+CHIP BADRECTANGLE 2412 2412  328  328
+CHIP BADRECTANGLE 2412 2412  329  329
+CHIP BADRECTANGLE 1134 1134  331  331
+CHIP BADRECTANGLE 1031 1031  355  355
+CHIP BADRECTANGLE  485  485  360  360
+CHIP BADRECTANGLE  487  487  361  361
+CHIP BADRECTANGLE  911  911  372  372
+CHIP BADRECTANGLE 1636 1636  384  384
+CHIP BADRECTANGLE 1289 1289  426  426
+CHIP BADRECTANGLE 2416 2416  426  426
+CHIP BADRECTANGLE 2428 2428  426  426
+CHIP BADRECTANGLE 2429 2429  426  426
+CHIP BADRECTANGLE 1289 1289  427  427
+CHIP BADRECTANGLE 2416 2416  427  427
+CHIP BADRECTANGLE 2428 2428  427  427
+CHIP BADRECTANGLE 2429 2429  427  427
+CHIP BADRECTANGLE 1425 1425  428  428
+CHIP BADRECTANGLE  163  163  432  432
+CHIP BADRECTANGLE  257  257  434  434
+CHIP BADRECTANGLE  266  266  452  452
+CHIP BADRECTANGLE  289  289  452  452
+CHIP BADRECTANGLE  282  282  458  458
+CHIP BADRECTANGLE  297  297  461  461
+CHIP BADRECTANGLE  275  275  470  470
+CHIP BADRECTANGLE  295  295  470  470
+CHIP BADRECTANGLE  311  311  470  470
+CHIP BADRECTANGLE 1376 1376  470  470
+CHIP BADRECTANGLE 1376 1376  476  476
+CHIP BADRECTANGLE 1378 1378  477  477
+CHIP BADRECTANGLE 1737 1737  477  477
+CHIP BADRECTANGLE  320  320  479  479
+CHIP BADRECTANGLE  322  322  482  482
+CHIP BADRECTANGLE 1391 1391  484  484
+CHIP BADRECTANGLE 2215 2215  494  494
+CHIP BADRECTANGLE  689  689  500  500
+CHIP BADRECTANGLE   51   51  538  538
+CHIP BADRECTANGLE  537  537  544  544
+CHIP BADRECTANGLE  132  132  556  556
+CHIP BADRECTANGLE 1943 1943  560  560
+CHIP BADRECTANGLE 2068 2068  581  581
+CHIP BADRECTANGLE  240  240  589  589
+CHIP BADRECTANGLE 2517 2517  597  597
+CHIP BADRECTANGLE 1021 1021  607  607
+CHIP BADRECTANGLE    1    1  614  614
+CHIP BADRECTANGLE    2    2  614  614
+CHIP BADRECTANGLE 2291 2291  614  614
+CHIP BADRECTANGLE    0    0  615  615
+CHIP BADRECTANGLE    1    1  615  615
+CHIP BADRECTANGLE    2    2  615  615
+CHIP BADRECTANGLE 2291 2291  615  615
+CHIP BADRECTANGLE    0    0  616  616
+CHIP BADRECTANGLE    1    1  616  616
+CHIP BADRECTANGLE    2    2  616  616
+CHIP BADRECTANGLE  263  263  622  622
+CHIP BADRECTANGLE  254  254  665  665
+CHIP BADRECTANGLE  241  241  676  676
+CHIP BADRECTANGLE  241  241  677  677
+CHIP BADRECTANGLE 2346 2346  725  725
+CHIP BADRECTANGLE 2345 2345  726  726
+CHIP BADRECTANGLE 2346 2346  726  726
+CHIP BADRECTANGLE 2347 2347  726  726
+CHIP BADRECTANGLE 2346 2346  727  727
+CHIP BADRECTANGLE  226  226  749  749
+CHIP BADRECTANGLE  246  246  753  753
+CHIP BADRECTANGLE 1824 1824  774  774
+CHIP BADRECTANGLE 2396 2396  790  790
+CHIP BADRECTANGLE 2300 2300  825  825
+CHIP BADRECTANGLE 2301 2301  825  825
+CHIP BADRECTANGLE 2302 2302  825  825
+CHIP BADRECTANGLE 2300 2300  826  826
+CHIP BADRECTANGLE 2301 2301  826  826
+CHIP BADRECTANGLE 2082 2082  838  838
+CHIP BADRECTANGLE 2096 2096  841  841
+CHIP BADRECTANGLE 1547 1547  855  855
+CHIP BADRECTANGLE  167  167  881  881
+CHIP BADRECTANGLE  606  606  903  903
+CHIP BADRECTANGLE  158  158  919  919
+CHIP BADRECTANGLE  158  158  920  920
+CHIP BADRECTANGLE 1290 1290  920  920
+CHIP BADRECTANGLE 1290 1290  921  921
+CHIP BADRECTANGLE  896  896  926  926
+CHIP BADRECTANGLE 1239 1239  928  928
+CHIP BADRECTANGLE 2071 2071  942  942
+CHIP BADRECTANGLE  169  169  964  964
+CHIP BADRECTANGLE  168  168  965  965
+CHIP BADRECTANGLE  560  560  977  977
+CHIP BADRECTANGLE 2177 2177 1053 1053
+CHIP BADRECTANGLE 1165 1165 1060 1060
+CHIP BADRECTANGLE  315  315 1064 1064
+CHIP BADRECTANGLE  213  213 1107 1107
+CHIP BADRECTANGLE  597  597 1135 1135
+CHIP BADRECTANGLE    6    6 1151 1151
+CHIP BADRECTANGLE  131  131 1155 1155
+CHIP BADRECTANGLE 2127 2127 1155 1155
+CHIP BADRECTANGLE  355  355 1177 1177
+CHIP BADRECTANGLE 2081 2081 1210 1210
+CHIP BADRECTANGLE 1508 1508 1220 1220
+CHIP BADRECTANGLE   92   92 1230 1230
+CHIP BADRECTANGLE   92   92 1231 1231
+CHIP BADRECTANGLE 1765 1765 1259 1259
+CHIP BADRECTANGLE 1765 1765 1260 1260
+CHIP BADRECTANGLE 2272 2272 1266 1266
+CHIP BADRECTANGLE 1622 1622 1271 1271
+CHIP BADRECTANGLE 2485 2485 1316 1316
+CHIP BADRECTANGLE 2486 2486 1316 1316
+CHIP BADRECTANGLE 2487 2487 1316 1316
+CHIP BADRECTANGLE 2484 2484 1317 1317
+CHIP BADRECTANGLE 2485 2485 1317 1317
+CHIP BADRECTANGLE 2486 2486 1317 1317
+CHIP BADRECTANGLE 2487 2487 1317 1317
+CHIP BADRECTANGLE 2484 2484 1318 1318
+CHIP BADRECTANGLE 2485 2485 1318 1318
+CHIP BADRECTANGLE 2486 2486 1318 1318
+CHIP BADRECTANGLE 2487 2487 1318 1318
+CHIP BADRECTANGLE 2484 2484 1319 1319
+CHIP BADRECTANGLE 2485 2485 1319 1319
+CHIP BADRECTANGLE 2486 2486 1319 1319
+CHIP BADRECTANGLE 2487 2487 1319 1319
+CHIP BADRECTANGLE 1067 1067 1328 1328
+CHIP BADRECTANGLE   75   75 1348 1348
+CHIP BADRECTANGLE   76   76 1348 1348
+CHIP BADRECTANGLE   77   77 1348 1348
+CHIP BADRECTANGLE   74   74 1349 1349
+CHIP BADRECTANGLE   75   75 1349 1349
+CHIP BADRECTANGLE   76   76 1349 1349
+CHIP BADRECTANGLE   77   77 1349 1349
+CHIP BADRECTANGLE   78   78 1349 1349
+CHIP BADRECTANGLE   74   74 1350 1350
+CHIP BADRECTANGLE   75   75 1350 1350
+CHIP BADRECTANGLE   76   76 1350 1350
+CHIP BADRECTANGLE   77   77 1350 1350
+CHIP BADRECTANGLE   78   78 1350 1350
+CHIP BADRECTANGLE   75   75 1351 1351
+CHIP BADRECTANGLE   76   76 1351 1351
+CHIP BADRECTANGLE   77   77 1351 1351
+CHIP BADRECTANGLE   78   78 1351 1351
+CHIP BADRECTANGLE 1445 1445 1380 1380
+CHIP BADRECTANGLE  231  231 1381 1381
+CHIP BADRECTANGLE  232  232 1381 1381
+CHIP BADRECTANGLE  233  233 1381 1381
+CHIP BADRECTANGLE  230  230 1382 1382
+CHIP BADRECTANGLE  231  231 1382 1382
+CHIP BADRECTANGLE  232  232 1382 1382
+CHIP BADRECTANGLE  233  233 1382 1382
+CHIP BADRECTANGLE  231  231 1383 1383
+CHIP BADRECTANGLE  232  232 1383 1383
+CHIP BADRECTANGLE   36   36 1407 1407
+CHIP BADRECTANGLE  582  582 1413 1413
+CHIP BADRECTANGLE  582  582 1414 1414
+CHIP BADRECTANGLE 2184 2184 1424 1424
+CHIP BADRECTANGLE  787  787 1428 1428
+CHIP BADRECTANGLE  273  273 1431 1431
+CHIP BADRECTANGLE 2197 2197 1440 1440
+CHIP BADRECTANGLE 2205 2205 1448 1448
+CHIP BADRECTANGLE 2216 2216 1456 1456
+CHIP BADRECTANGLE 2217 2217 1456 1456
+CHIP BADRECTANGLE 2228 2228 1466 1466
+CHIP BADRECTANGLE  506  506 1486 1486
+CHIP BADRECTANGLE 2011 2011 1493 1493
+CHIP BADRECTANGLE  524  524 1494 1494
+CHIP BADRECTANGLE 2002 2002 1502 1502
+CHIP BADRECTANGLE  520  520 1506 1506
+CHIP BADRECTANGLE  521  521 1506 1506
+CHIP BADRECTANGLE  675  675 1507 1507
+CHIP BADRECTANGLE  675  675 1508 1508
+CHIP BADRECTANGLE  676  676 1508 1508
+CHIP BADRECTANGLE 2009 2009 1512 1512
+CHIP BADRECTANGLE  283  283 1523 1523
+CHIP BADRECTANGLE   99   99 1535 1535
+CHIP BADRECTANGLE   42   42 1542 1542
+CHIP BADRECTANGLE   48   48 1542 1542
+CHIP BADRECTANGLE   61   61 1542 1542
+CHIP BADRECTANGLE   42   42 1543 1543
+CHIP BADRECTANGLE   48   48 1543 1543
+CHIP BADRECTANGLE   61   61 1543 1543
+CHIP BADRECTANGLE  504  504 1549 1549
+CHIP BADRECTANGLE 1412 1412 1556 1556
+CHIP BADRECTANGLE 2195 2195 1579 1579
+CHIP BADRECTANGLE  910  910 1661 1661
+CHIP BADRECTANGLE  155  155 1713 1713
+CHIP BADRECTANGLE  219  219 1720 1720
+CHIP BADRECTANGLE   93   93 1725 1725
+CHIP BADRECTANGLE   94   94 1725 1725
+CHIP BADRECTANGLE   93   93 1726 1726
+CHIP BADRECTANGLE   94   94 1726 1726
+CHIP BADRECTANGLE 1186 1186 1729 1729
+CHIP BADRECTANGLE  405  405 1742 1742
+CHIP BADRECTANGLE 1675 1675 1749 1749
+CHIP BADRECTANGLE   41   41 1778 1778
+CHIP BADRECTANGLE  394  394 1795 1795
+CHIP BADRECTANGLE 2483 2483 1799 1799
+CHIP BADRECTANGLE 1803 1803 1803 1803
+CHIP BADRECTANGLE 1841 1841 1806 1806
+CHIP BADRECTANGLE 2206 2206 1843 1843
+CHIP BADRECTANGLE  349  349 1855 1855
+CHIP BADRECTANGLE 1036 1036 1867 1867
+CHIP BADRECTANGLE   94   94 1871 1871
+CHIP BADRECTANGLE   93   93 1872 1872
+CHIP BADRECTANGLE   94   94 1872 1872
+CHIP BADRECTANGLE   95   95 1872 1872
+CHIP BADRECTANGLE 2060 2060 1872 1872
+CHIP BADRECTANGLE   93   93 1873 1873
+CHIP BADRECTANGLE   94   94 1873 1873
+CHIP BADRECTANGLE   95   95 1873 1873
+CHIP BADRECTANGLE   93   93 1874 1874
+CHIP BADRECTANGLE   94   94 1874 1874
+CHIP BADRECTANGLE   95   95 1874 1874
+CHIP BADRECTANGLE 2128 2128 1887 1887
+CHIP BADRECTANGLE 2232 2232 1898 1898
+CHIP BADRECTANGLE  391  391 1901 1901
+CHIP BADRECTANGLE 2130 2130 1911 1911
+CHIP BADRECTANGLE 2129 2129 1912 1912
+CHIP BADRECTANGLE 2130 2130 1912 1912
+CHIP BADRECTANGLE 2131 2131 1912 1912
+CHIP BADRECTANGLE 2294 2294 1912 1912
+CHIP BADRECTANGLE 2297 2297 1912 1912
+CHIP BADRECTANGLE 2130 2130 1913 1913
+CHIP BADRECTANGLE 2295 2295 1914 1914
+CHIP BADRECTANGLE 1549 1549 1918 1918
+CHIP BADRECTANGLE 2446 2446 1925 1925
+CHIP BADRECTANGLE 2444 2444 1926 1926
+CHIP BADRECTANGLE 2445 2445 1926 1926
+CHIP BADRECTANGLE 2446 2446 1926 1926
+CHIP BADRECTANGLE 2447 2447 1926 1926
+CHIP BADRECTANGLE 2444 2444 1927 1927
+CHIP BADRECTANGLE 2445 2445 1927 1927
+CHIP BADRECTANGLE 2446 2446 1927 1927
+CHIP BADRECTANGLE 2447 2447 1927 1927
+CHIP BADRECTANGLE 2444 2444 1928 1928
+CHIP BADRECTANGLE 2445 2445 1928 1928
+CHIP BADRECTANGLE 2446 2446 1928 1928
+CHIP BADRECTANGLE 2447 2447 1928 1928
+CHIP BADRECTANGLE 2161 2161 1929 1929
+CHIP BADRECTANGLE 2445 2445 1929 1929
+CHIP BADRECTANGLE 2446 2446 1929 1929
+CHIP BADRECTANGLE  289  289 1934 1934
+CHIP BADRECTANGLE 1420 1420 1938 1938
+CHIP BADRECTANGLE  297  297 1942 1942
+CHIP BADRECTANGLE 2191 2191 1943 1943
+CHIP BADRECTANGLE  292  292 1952 1952
+CHIP BADRECTANGLE  311  311 1952 1952
+#END OF XCALIBUR CHIP CHARACTERISTICS FILE
+"""
+
+setfileFrelon = """#XCALIBUR SYSTEM
+#XCALIBUR SETUP FILE
+#*******************************************************************************************************
+# CHIP CHARACTERISTICS e_19_020609.ccd         D A T E Wed-Sep-16-10-00-59-2009
+# This program produces version 1.9
+#******************************************************************************************************
+#THIS FILE IS USER READABLE - BUT SHOULD NOT BE TOUCHED BY THE USER
+#ANY CHANGES TO THIS FILE WILL RESULT IN LOSS OF WARRANTY!
+#WATCH OUT: THE REPLACE PIXEL HAS TO 1X1,2X2,4x4 BINNING COMPATIBLE!
+#NOTE: THE FUNCTIONS BADCOL1X1,BADCOL2X2,BADCOL4X4 ARE ONLY USED IN THEIR RESPECTIVE BINNINGS AND HAVE TO BE COMPATIBLE WITH THEM!
+#CHIP IDCODE producer type serial
+CHIP IDCODE "n/a" "n/a" "n/a"
+#CHIP TAPER producer type serial
+CHIP TAPER "" "" ""
+#CHIP SCINTILLATORID id
+#id: 1=GREEN400; 2=40; 3=60; 4=100; 5=MED; 6=FINE; 7=GREEN400_NEW
+#CHIP SCINTILLATORID 1
+#ALL COORDINATES GO FROM 0 TO N-1
+#CHIP BADPOINT treatment options: IGNORE,REPLACE,AVERAGE
+#CHIP BADPOINT x1x1 y1x1 treatment r1x1x1 r1y1x1 r2x1x1 r2y1x1
+#CHIP BADPOINT 630 422 REPLACE 632 422 0 0
+#CHIP BADROW treatment options: IGNORE,REPLACE
+#CHIP BADROW xs1x1 xe1x1 y1x1 treatment rxs1x1 rxe1x1 ry1x1
+#CHIP BADROW 800 1023 20 REPLACE 800 1023 19
+#CHIP BADROW1X1 treatment options: IGNORE,REPLACE,AVERAGE,REPLACETOP,REPLACEBOTTOM,AVERAGETOPBOTTOM
+#CHIP BADROW1X1 xs1x1 xe1x1 y1x1 treatment (IGNORE,REPLACE) rxs1x1 rxe1x1 ry1x1
+#CHIP BADROW1X1 xs1x1 xe1x1 y1x1 treatment (AVERAGE) ry1x1_1 ry1x1_2 0
+#CHIP BADROW1X1 xs1x1 xe1x1 y1x1 treatment (REPLACETOP,REPLACEBOTTOM,AVERAGETOPBOTTOM) 0 0 0
+#CHIP BADROW1X1 801 1023 20 REPLACE 801 1023 22
+#CHIP BADROW2X2 treatment options: IGNORE,REPLACE,AVERAGE,REPLACETOP,REPLACEBOTTOM,AVERAGETOPBOTTOM
+#CHIP BADROW2X2 xs2x2 xe2x2 y2x2 treatment (IGNORE,REPLACE) rxs2x2 rxe2x2 ry2x2
+#CHIP BADROW2X2 xs2x2 xe2x2 y2x2 treatment (AVERAGE) ry2x2_1 ry2x2_2 0
+#CHIP BADROW2X2 xs2x2 xe2x2 y2x2 treatment (REPLACETOP,REPLACEBOTTOM,AVERAGETOPBOTTOM) 0 0 0
+#CHIP BADROW2X2 401 502 10 REPLACE 401 502 11
+#CHIP BADROW4X4 treatment options: IGNORE,REPLACE,AVERAGE,REPLACETOP,REPLACEBOTTOM,AVERAGETOPBOTTOM
+#CHIP BADROW4X4 xs4x4 xe4x4 y4x4 treatment (IGNORE,REPLACE) rxs4x4 rxe4x4 ry4x4
+#CHIP BADROW4X4 xs4x4 xe4x4 y4x4 treatment (AVERAGE) ry4x4_1 ry4x4_2 0
+#CHIP BADROW4X4 xs4x4 xe4x4 y4x4 treatment (REPLACETOP,REPLACEBOTTOM,AVERAGETOPBOTTOM) 0 0 0
+#CHIP BADROW4X4 200 205 5 REPLACE 200 205 6
+#CHIP BADCOL treatment options: IGNORE,REPLACE,AVERAGE,REPLACELEFT,REPLACERIGHT,AVERAGELEFTRIGHT
+#CHIP BADCOL x1x1 ys1x1 ye1x1 treatment (IGNORE,REPLACE) rx1x1 rsy1x1 rey1x1
+#CHIP BADCOL x1x1 ys1x1 ye1x1 treatment (AVERAGE) rx1x1_1 rx1x1_2 0
+#CHIP BADCOL x1x1 ys1x1 ye1x1 treatment (REPLACELEFT,REPLACERIGHT,AVERAGELEFTRIGHT) 0 0 0
+#CHIP BADCOL 20 801 1023 REPLACE 22 801 1023
+#CHIP BADCOL1X1 treatment options: IGNORE,REPLACE,AVERAGE,REPLACELEFT,REPLACERIGHT,AVERAGELEFTRIGHT
+#CHIP BADCOL1X1 x1x1 ys1x1 ye1x1 treatment (IGNORE,REPLACE) rx1x1 rsy1x1 rey1x1
+#CHIP BADCOL1X1 x1x1 ys1x1 ye1x1 treatment (AVERAGE) rx1x1_1 rx1x1_2 0
+#CHIP BADCOL1X1 x1x1 ys1x1 ye1x1 treatment (REPLACELEFT,REPLACERIGHT,AVERAGELEFTRIGHT) 0 0 0
+#CHIP BADCOL1X1 20 801 1023 REPLACE 22 801 1023
+#CHIP BADCOL1X1 1780 1010 2047 REPLACELEFT 0 0 0
+#CHIP BADCOL1X1 1781 1010 2047 REPLACERIGHT 0 0 0
+#CHIP BADCOL1X1 2043 0 1023 AVERAGELEFTRIGHT 0 0 0
+#CHIP BADCOL2X2 treatment options: IGNORE,REPLACE,AVERAGE,REPLACELEFT,REPLACERIGHT,AVERAGELEFTRIGHT
+#CHIP BADCOL2X2 x2x2 ys2x2 ye2x2 treatment (IGNORE,REPLACE) rx2x2 rsy2x2 rey2x2
+#CHIP BADCOL2X2 x2x2 ys2x2 ye2x2 treatment (AVERAGE) rx2x2_1 rx2x2_2 0
+#CHIP BADCOL2X2 x2x2 ys2x2 ye2x2 treatment (REPLACELEFT,REPLACERIGHT,AVERAGELEFTRIGHT) 0 0 0
+#CHIP BADCOL2X2 10 401 502 REPLACE 11 401 502
+#CHIP BADCOL2X2 442 500 1023 AVERAGELEFTRIGHT 0 0 0
+#CHIP BADCOL2X2 890 500 1023 AVERAGELEFTRIGHT 0 0 0
+#CHIP BADCOL2X2 1021 0 511 AVERAGELEFTRIGHT 0 0 0
+#CHIP BADCOL4X4 treatment options: IGNORE,REPLACE,AVERAGE,REPLACELEFT,REPLACERIGHT,AVERAGELEFTRIGHT
+#CHIP BADCOL4X4 x4x4 ys4x4 ye4x4 treatment (IGNORE,REPLACE) rx4x4 rsy4x4 rey4x4
+#CHIP BADCOL4X4 x4x4 ys4x4 ye4x4 treatment (AVERAGE) rx4x4_1 rx4x4_2 0
+#CHIP BADCOL4X4 x4x4 ys4x4 ye4x4 treatment (REPLACELEFT,REPLACERIGHT,AVERAGELEFTRIGHT) 0 0 0
+#CHIP BADCOL4X4 5 200 205 REPLACE 6 200 205
+#CHIP BADCOL4X4 445 250 511 AVERAGELEFTRIGHT 0 0 0
+#CHIP BADCOL4X4 510 0 255 AVERAGELEFTRIGHT 0 0 0
+#CHIP FIP60ORIGIN x y
+#CHIP FIP60ORIGIN 16 12
+#CHIP CORNERMASK INFO: Use 0-based coordinates! The corners are recognized as follows:
+#left = x < xw/2;  right = x >= xw/2;  bottom = y < yw/2;  top = y >= yw/2
+#CHIP CORNERMASK n x1 y1 x2 y2 x3 y3 x4 y4
+#CHIP CORNERMASK 0  0 0  0 0  0 0  0 0
+#BAD POLYGON SUPPORT
+#CHIP GAINMO 240.00000
+#CHIP GAINCU 110.00000
+#MACHINEFUNCTION SUPPORT as derived by XX YLID
+#CHIP MACHINEFUNCTION A B
+#CHIP MACHINEFUNCTION 0 0
+#CHIP BADRECTANGLE xl xr yb yt
+#END OF XCALIBUR CHIP CHARACTERISTICS FILE
+"""
+
+ccd1M = base64.b64decode("""DAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAbi9hAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAG4vYQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABuL2EAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAC9hAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAvYQAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAL2EAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAJQABAAQAwwDTAAAAAAAAAAAAAADUAwAAAAAA
+AAAAAQAEAJcBpwEAAAAAAAAAAAAA1AMAAAAAAAAAAAEABABrAnsCAAAAAAAAAAAAANQDAAAAAAAA
+AAABAAQAPwNPAwAAAAAAAAAAAADUAwAAAAAAAAAAAQAEAAAAEgQAAAAAAAAAAOcB7QEAAAAAAAAA
+AAEABAAuAC4AAAAAAAAAAAArACsAAAAAAAAAAAABAAQAXABcAAAAAAAAAAAANwA3AAAAAAAAAAAA
+AQAEAMIBwgEAAAAAAAAAAEUARQAAAAAAAAAAAAEABAArASsBAAAAAAAAAACOAI4AAAAAAAAAAAAB
+AAQA3gDeAAAAAAAAAAAAoACgAAAAAAAAAAAAAQAEAAYEBgQAAAAAAAAAAKIAogAAAAAAAAAAAAEA
+BAAVAxUDAAAAAAAAAADQANAAAAAAAAAAAAABAAQAHQMdAwAAAAAAAAAA2wDbAAAAAAAAAAAAAQAE
+AK8DrwMAAAAAAAAAAA0BDQEAAAAAAAAAAAEABAC9A70DAAAAAAAAAAANAQ0BAAAAAAAAAAABAAQA
+HQAdAAAAAAAAAAAAsgGyAQAAAAAAAAAAAQAEALwAvAAAAAAAAAAAAMwBzAEAAAAAAAAAAAEABACv
+AK8AAAAAAAAAAADeAd4BAAAAAAAAAAABAAQAXANcAwAAAAAAAAAAAQIBAgAAAAAAAAAAAQAEABEE
+EQQAAAAAAAAAAAMCAwIAAAAAAAAAAAEABAAuAC4AAAAAAAAAAAAZAhkCAAAAAAAAAAABAAQAXABc
+AAAAAAAAAAAAJQIlAgAAAAAAAAAAAQAEACIAIgAAAAAAAAAAAHICcgIAAAAAAAAAAAEABAA6AjoC
+AAAAAAAAAACBAoECAAAAAAAAAAABAAQAOgI6AgAAAAAAAAAAggKCAgAAAAAAAAAAAQAEAH4DfgMA
+AAAAAAAAALsCuwIAAAAAAAAAAAEABACdA50DAAAAAAAAAAC9Ar0CAAAAAAAAAAABAAQAGQMZAwAA
+AAAAAAAAwALAAgAAAAAAAAAAAQAEAKcDpwMAAAAAAAAAAHUDdQMAAAAAAAAAAAEABACtA60DAAAA
+AAAAAAB4A3gDAAAAAAAAAAABAAQArQOtAwAAAAAAAAAAlwOXAwAAAAAAAAAAAQAEAK0DrQMAAAAA
+AAAAAJgDmAMAAAAAAAAAAAEABAC8ALwAAAAAAAAAAAC6A7oDAAAAAAAAAAABAAQArwCvAAAAAAAA
+AAAAzAPMAwAAAAAAAAAAAQAEABIEEgQAAAAAAAAAANMD0wMAAAAAAAAAAAEABADpA+kDAAAAAAAA
+AADUA9QDAAAAAAAAAAABAAQAEgQSBAAAAAAAAAAA1APUAwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+""")
+
+ccd2M = base64.b64decode("""CwABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAbi9hAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAG4vYQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABuL2EAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAC9hAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAvYQAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAL2EAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAwQABAAQAwwDUAAAAAAAAAAAAAADCBQAAAAAA
+AAAAAQAEAJcBqAEAAAAAAAAAAAAAwgUAAAAAAAAAAAEABABrAnwCAAAAAAAAAAAAAMIFAAAAAAAA
+AAABAAQAPwNQAwAAAAAAAAAAAADCBQAAAAAAAAAAAQAEABMEJAQAAAAAAAAAAAAAwgUAAAAAAAAA
+AAEABADnBPgEAAAAAAAAAAAAAMIFAAAAAAAAAAABAAQAuwXMBQAAAAAAAAAAAADCBQAAAAAAAAAA
+AQAEAAAAjgYAAAAAAAAAAOcB7gEAAAAAAAAAAAEABAAAAI4GAAAAAAAAAADVA9wDAAAAAAAAAAAB
+AAQArAWsBQAAAAAAAAAACgAKAAAAAAAAAAAAAQAEAHwGfAYAAAAAAAAAAFMAUwAAAAAAAAAAAAEA
+BAC8ALwAAAAAAAAAAABYAFgAAAAAAAAAAAABAAQAvAC8AAAAAAAAAAAAWQBZAAAAAAAAAAAAAQAE
+AGwGbAYAAAAAAAAAAJMAkwAAAAAAAAAAAAEABABpBmkGAAAAAAAAAACbAJsAAAAAAAAAAAABAAQA
+agZqBgAAAAAAAAAAmwCbAAAAAAAAAAAAAQAEABUGFQYAAAAAAAAAAL4AvgAAAAAAAAAAAAEABAAW
+BhYGAAAAAAAAAAC+AL4AAAAAAAAAAAABAAQAFwYXBgAAAAAAAAAAvgC+AAAAAAAAAAAAAQAEABUG
+FQYAAAAAAAAAAL8AvwAAAAAAAAAAAAEABAAWBhYGAAAAAAAAAAC/AL8AAAAAAAAAAAABAAQAFwYX
+BgAAAAAAAAAAvwC/AAAAAAAAAAAAAQAEABgGGAYAAAAAAAAAAL8AvwAAAAAAAAAAAAEABAAWBhYG
+AAAAAAAAAADAAMAAAAAAAAAAAAABAAQAFwYXBgAAAAAAAAAAwADAAAAAAAAAAAAAAQAEABgGGAYA
+AAAAAAAAAMAAwAAAAAAAAAAAAAEABADZANkAAAAAAAAAAADoAOgAAAAAAAAAAAABAAQAWgBaAAAA
+AAAAAAAA6QDpAAAAAAAAAAAAAQAEAFsAWwAAAAAAAAAAAOkA6QAAAAAAAAAAAAEABABcAFwAAAAA
+AAAAAADpAOkAAAAAAAAAAAABAAQAWgBaAAAAAAAAAAAA6gDqAAAAAAAAAAAAAQAEAFsAWwAAAAAA
+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
+/gH+AQAAAAAAAAAArASsBAAAAAAAAAAAAQAEAC0GLQYAAAAAAAAAALgEuAQAAAAAAAAAAAEABAAu
+Bi4GAAAAAAAAAAC4BLgEAAAAAAAAAAABAAQALQYtBgAAAAAAAAAAvAS8BAAAAAAAAAAAAQAEAC4G
+LgYAAAAAAAAAALwEvAQAAAAAAAAAAAEABAAyADIAAAAAAAAAAADGBMYEAAAAAAAAAAABAAQAMwAz
+AAAAAAAAAAAAxgTGBAAAAAAAAAAAAQAEAC0GLQYAAAAAAAAAAMYExgQAAAAAAAAAAAEABAAuBi4G
+AAAAAAAAAADGBMYEAAAAAAAAAAABAAQAMQAxAAAAAAAAAAAAxwTHBAAAAAAAAAAAAQAEADIAMgAA
+AAAAAAAAAMcExwQAAAAAAAAAAAEABAAzADMAAAAAAAAAAADHBMcEAAAAAAAAAAABAAQANAA0AAAA
+AAAAAAAAxwTHBAAAAAAAAAAAAQAEADEAMQAAAAAAAAAAAMgEyAQAAAAAAAAAAAEABAAyADIAAAAA
+AAAAAADIBMgEAAAAAAAAAAABAAQAMwAzAAAAAAAAAAAAyATIBAAAAAAAAAAAAQAEADQANAAAAAAA
+AAAAAMgEyAQAAAAAAAAAAAEABAAyADIAAAAAAAAAAADJBMkEAAAAAAAAAAABAAQAMwAzAAAAAAAA
+AAAAyQTJBAAAAAAAAAAAAQAEADMBMwEAAAAAAAAAAM8EzwQAAAAAAAAAAAEABAA0ATQBAAAAAAAA
+AADPBM8EAAAAAAAAAAABAAQANQE1AQAAAAAAAAAAzwTPBAAAAAAAAAAAAQAEADMBMwEAAAAAAAAA
+ANAE0AQAAAAAAAAAAAEABAA0ATQBAAAAAAAAAADQBNAEAAAAAAAAAAABAAQANQE1AQAAAAAAAAAA
+0ATQBAAAAAAAAAAAAQAEAFEGUQYAAAAAAAAAAAQFBAUAAAAAAAAAAAEABABSBlIGAAAAAAAAAAAE
+BQQFAAAAAAAAAAABAAQAUwZTBgAAAAAAAAAABAUEBQAAAAAAAAAAAQAEAFAGUAYAAAAAAAAAAAUF
+BQUAAAAAAAAAAAEABABRBlEGAAAAAAAAAAAFBQUFAAAAAAAAAAABAAQAUgZSBgAAAAAAAAAABQUF
+BQAAAAAAAAAAAQAEAFMGUwYAAAAAAAAAAAUFBQUAAAAAAAAAAAEABABUBlQGAAAAAAAAAAAFBQUF
+AAAAAAAAAAABAAQAegZ6BgAAAAAAAAAABQUFBQAAAAAAAAAAAQAEAFAGUAYAAAAAAAAAAAYFBgUA
+AAAAAAAAAAEABABRBlEGAAAAAAAAAAAGBQYFAAAAAAAAAAABAAQAUgZSBgAAAAAAAAAABgUGBQAA
+AAAAAAAAAQAEAFMGUwYAAAAAAAAAAAYFBgUAAAAAAAAAAAEABABRBlEGAAAAAAAAAAAHBQcFAAAA
+AAAAAAABAAQAUgZSBgAAAAAAAAAABwUHBQAAAAAAAAAAAQAEAFMGUwYAAAAAAAAAAAcFBwUAAAAA
+AAAAAAEABABLBUsFAAAAAAAAAAAKBQoFAAAAAAAAAAABAAQATAVMBQAAAAAAAAAACgUKBQAAAAAA
+AAAAAQAEAE0FTQUAAAAAAAAAAAoFCgUAAAAAAAAAAAEABABLBUsFAAAAAAAAAAALBQsFAAAAAAAA
+AAABAAQATAVMBQAAAAAAAAAACwULBQAAAAAAAAAAAQAEAE0FTQUAAAAAAAAAAAsFCwUAAAAAAAAA
+AAEABABLBUsFAAAAAAAAAAAMBQwFAAAAAAAAAAABAAQATAVMBQAAAAAAAAAADAUMBQAAAAAAAAAA
+AQAEAE0FTQUAAAAAAAAAAAwFDAUAAAAAAAAAAAEABADIBMgEAAAAAAAAAAA2BTYFAAAAAAAAAAAB
+AAQA3AXcBQAAAAAAAAAANgU2BQAAAAAAAAAAAQAEAPkE+QQAAAAAAAAAAEMFQwUAAAAAAAAAAAEA
+BADnAecBAAAAAAAAAABFBUUFAAAAAAAAAAABAAQAPQU9BQAAAAAAAAAAUwVTBQAAAAAAAAAAAQAE
+AD4FPgUAAAAAAAAAAFMFUwUAAAAAAAAAAAEABAA/BT8FAAAAAAAAAABUBVQFAAAAAAAAAAABAAQA
+PAU8BQAAAAAAAAAAVQVVBQAAAAAAAAAAAQAEAD8FPwUAAAAAAAAAAFUFVQUAAAAAAAAAAAEABAA8
+BTwFAAAAAAAAAABWBVYFAAAAAAAAAAABAAQAPgU+BQAAAAAAAAAAVgVWBQAAAAAAAAAAAQAEAGwA
+bAAAAAAAAAAAAFcFVwUAAAAAAAAAAAEABAA8BTwFAAAAAAAAAABXBVcFAAAAAAAAAAABAAQAPQU9
+BQAAAAAAAAAAVwVXBQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAA=
+""")
+
+ccd6M = base64.b64decode("""DAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAbi9hAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAG4vYQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABuL2EAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAC9hAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAvYQAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAL2EAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+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
+AAAAAAAAAAAAAAAAAAAAAA==
+""")
+
+ccdEsp = base64.b64decode("""DAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAbi9hAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAG4vYQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABuL2EAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAC9hAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAvYQAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAL2EAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAA==
+""")
+
+sel_od = base64.b64decode("""BAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAnR29uaW9tZXRlciBLTTQvWGNhbGlidXIsIGRl
+dGVjdG9yOiBTYXBwaGlyZTIgKGxhcmdlIEJlIHdpbmRvdyknAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAOI9AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA""")
+
+sel_odEsp = base64.b64decode("""BgABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAnR29uaW9tZXRlciBLTTQvWGNhbGlidXIsIGRl
+dGVjdG9yOiBTYXBwaGlyZTIgKGxhcmdlIEJlIHdpbmRvdyknAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAOI9AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+""")
