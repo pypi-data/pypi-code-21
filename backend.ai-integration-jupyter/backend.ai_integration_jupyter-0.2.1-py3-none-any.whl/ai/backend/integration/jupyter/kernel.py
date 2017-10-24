@@ -1,0 +1,319 @@
+from metakernel import MetaKernel
+
+from ai.backend.client.kernel import Kernel
+from ai.backend.client.exceptions import BackendAPIError
+from ai.backend.client.compat import token_hex
+
+
+class BackendKernelBase(MetaKernel):
+
+    # ref: https://github.com/ipython/ipykernel/blob/master/ipykernel/kernelbase.py
+
+    implementation = 'Backend.AI'
+    implementation_version = '1.0'
+    language = 'python'
+    language_version = '3'
+    language_info = {
+        'name': 'Backend.AI (base)',
+        'mimetype': 'text/x-python3',
+        'file_extension': '.py',
+    }
+    banner = 'Backend.AI Base'
+
+    backend_lang = 'python3'
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.log.info(f'Backend.AI kernel starting with client session ID: {self.ident}')
+        self.kernel = Kernel.get_or_create(self.backend_lang, self.ident)
+
+    def do_execute_direct(self, code,
+                          silent=False,
+                          store_history=True,
+                          user_expressions=None,
+                          allow_stdin=True):
+        self._allow_stdin = allow_stdin
+        run_id = token_hex(8)
+        while True:
+            try:
+                result = self.kernel.execute(run_id, code, mode='query')
+            except BackendAPIError as e:
+                if e.status == 404:
+                    self.Error('[Backend.AI] The kernel is not found (maybe terminated due to idle/exec timeouts).')
+                    self.Error('[Backend.AI] Please restart the kernel to run again.')
+                else:
+                    self.Error(f"[Backend.AI] The server returned an error: {e.status} {e.reason} ({e.data['title']})")
+                return
+
+            if not silent:
+                for item in result['console']:
+                    if item[0] == 'stdout':
+                        self.send_response(self.iopub_socket, 'stream', {
+                            'name': 'stdout',
+                            'text': item[1],
+                        })
+                    elif item[0] == 'stderr':
+                        self.send_response(self.iopub_socket, 'stream', {
+                            'name': 'stderr',
+                            'text': item[1],
+                        })
+                    elif item[0] == 'media':
+                        self.send_response(self.iopub_socket, 'display_data', {
+                            'source': '<user-code>',
+                            'data': { item[1][0]: item[1][1] },
+                        })
+                    elif item[0] == 'html':
+                        self.send_response(self.iopub_socket, 'display_data', {
+                            'source': '<user-code>',
+                            'data': { 'text/html': item[1] },
+                        })
+
+            if result['status'] == 'finished':
+                break
+            elif result['status'] == 'waiting-input':
+                if allow_stdin:
+                    code = self.raw_input('')
+                else:
+                    code = '(user input not allowed)'
+            elif result['status'] == 'continued':
+                code = ''
+
+    def restart_kernel(self):
+        pass
+
+    def do_shutdown(self, restart):
+        # Jupyter's restarting first destroys the kernel and then start it over again.
+        # We cannot use our own restarting mechanism as it produces duplicate kernels.
+        try:
+            self.kernel.destroy()
+        except BackendAPIError as e:
+            if e.status == 404:
+                self.log.warning('do_shutdown: missing kernel, ignoring.')
+            else:
+                self.log.exception('do_shutdown: API returned an error')
+        except:
+            self.log.exception('do_shutdown: API returned an error')
+        return super().do_shutdown(restart)
+
+    def get_completions(self, info):
+        result = self.kernel.complete(info['code'], opts={
+            'row': info['line_num'],
+            'col': info['column'],
+            'line': info['line'],
+            'post': info['post'],
+        })
+        if result is None:
+            return tuple()
+        return result.get('completions', tuple())
+
+
+class BackendPythonKernel(BackendKernelBase):
+
+    language = 'python'
+    language_version = '3'
+    language_info = {
+        'name': 'Python 3 on Backend.AI',
+        'mimetype': 'text/x-python3',
+        'file_extension': '.py',
+        'codemirror_mode': 'python',
+    }
+    banner = 'Backend (Python 3)'
+
+    backend_lang = 'python3'
+
+
+class BackendPythonTensorFlowKernel(BackendKernelBase):
+
+    language = 'python'
+    language_version = '3'
+    language_info = {
+        'name': 'TensorFlow (Python 3, CPU) on Backend.AI',
+        'mimetype': 'text/x-python3',
+        'file_extension': '.py',
+        'codemirror_mode': 'python',
+    }
+    banner = 'Backend (TensorFlow with Python 3)'
+
+    backend_lang = 'python3-tensorflow'
+
+
+class BackendPythonTorchKernel(BackendKernelBase):
+
+    language = 'python'
+    language_version = '3'
+    language_info = {
+        'name': 'PyTorch (Python 3, CPU) on Backend.AI',
+        'mimetype': 'text/x-python3',
+        'file_extension': '.py',
+        'codemirror_mode': 'python',
+    }
+    banner = 'Backend (TensorFlow with Python 3)'
+
+    backend_lang = 'python3-torch'
+
+
+class BackendPythonTorchGPUKernel(BackendKernelBase):
+
+    language = 'python'
+    language_version = '3'
+    language_info = {
+        'name': 'PyTorch (Python 3, GPU) on Backend.AI',
+        'mimetype': 'text/x-python3',
+        'file_extension': '.py',
+        'codemirror_mode': 'python',
+    }
+    banner = 'Backend (TensorFlow with Python 3)'
+
+    backend_lang = 'python3-torch-gpu'
+
+
+class BackendPythonTensorFlowGPUKernel(BackendKernelBase):
+
+    language = 'python'
+    language_version = '3'
+    language_info = {
+        'name': 'TensorFlow (Python 3, GPU) on Backend.AI',
+        'mimetype': 'text/x-python3',
+        'file_extension': '.py',
+        'codemirror_mode': 'python',
+    }
+    banner = 'Backend (GPU-accelerated TensorFlow with Python 3)'
+
+    backend_lang = 'python3-tensorflow-gpu'
+
+
+class BackendJavascriptKernel(BackendKernelBase):
+
+    language = 'javascript'
+    language_version = '6'
+    language_info = {
+        'name': 'Javascript (NodeJS 6) on Backend.AI',
+        'mimetype': 'text/javascript',
+        'file_extension': '.js',
+        'codemirror_mode': 'javascript',
+    }
+    banner = 'Backend (NodeJS 6)'
+
+    backend_lang = 'nodejs6'
+
+
+class BackendPHPKernel(BackendKernelBase):
+
+    language = 'php'
+    language_version = '7'
+    language_info = {
+        'name': 'PHP 7 on Backend.AI',
+        'mimetype': 'text/x-php',
+        'file_extension': '.php',
+        'codemirror_mode': 'php',
+    }
+    banner = 'Backend (PHP 7)'
+
+    backend_lang = 'php7'
+
+
+class BackendJuliaKernel(BackendKernelBase):
+
+    language = 'julia'
+    language_version = '0.5'
+    language_info = {
+        'name': 'Julia 0.5 on Backend.AI',
+        'mimetype': 'text/x-julia',
+        'file_extension': '.jl',
+        'codemirror_mode': 'julia',
+    }
+    banner = 'Backend (Julia 0.5)'
+
+    backend_lang = 'julia'
+
+
+class BackendCKernel(BackendKernelBase):
+
+    language = 'c'
+    language_version = '11'
+    language_info = {
+        'name': 'C11 on Backend.AI',
+        'mimetype': 'text/x-csrc',
+        'file_extension': '.c',
+        'codemirror_mode': 'clike',
+    }
+    banner = 'Backend (C [gnu11])'
+
+    backend_lang = 'c'
+
+
+class BackendCppKernel(BackendKernelBase):
+
+    language = 'cpp'
+    language_version = '14'
+    language_info = {
+        'name': 'C++14 on Backend.AI',
+        'mimetype': 'text/x-c++src',
+        'file_extension': '.cc',
+        'codemirror_mode': 'clike',
+    }
+    banner = 'Backend (C++ [gnu++14])'
+
+    backend_lang = 'cpp'
+
+
+class BackendJavaKernel(BackendKernelBase):
+
+    language = 'java'
+    language_version = '8'
+    language_info = {
+        'name': 'Java8 on Backend.AI',
+        'mimetype': 'text/x-java',
+        'file_extension': '.java',
+        'codemirror_mode': 'clike',
+    }
+    banner = 'Backend (Java [openjdk8])'
+
+    backend_lang = 'java8'
+
+
+class BackendRKernel(BackendKernelBase):
+
+    language = 'r'
+    language_version = '3'
+    language_info = {
+        'name': 'R 3 on Backend.AI',
+        'mimetype': 'text/x-rsrc',
+        'file_extension': '.R',
+        'codemirror_mode': 'Rscript',
+    }
+    banner = 'Backend (R 3)'
+
+    backend_lang = 'r3'
+
+
+class BackendLuaKernel(BackendKernelBase):
+
+    language = 'lua'
+    language_version = '5.3'
+    language_info = {
+        'name': 'Lua 5.3 on Backend.AI',
+        'mimetype': 'text/x-lua',
+        'file_extension': '.lua',
+        'codemirror_mode': 'lua',
+    }
+    banner = 'Backend (Lua 5.3)'
+
+    backend_lang = 'lua5'
+
+
+kernels = [
+    BackendPythonKernel,
+    BackendPythonTorchKernel,
+    BackendPythonTorchGPUKernel,
+    BackendPythonTensorFlowKernel,
+    BackendPythonTensorFlowGPUKernel,
+    BackendJavascriptKernel,
+    BackendPHPKernel,
+    BackendJuliaKernel,
+    BackendCKernel,
+    BackendCppKernel,
+    BackendJavaKernel,
+    BackendRKernel,
+    BackendLuaKernel,
+]
