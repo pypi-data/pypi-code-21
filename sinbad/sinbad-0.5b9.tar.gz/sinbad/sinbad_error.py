@@ -1,0 +1,3 @@
+
+class SinbadError(RuntimeError):
+    pass
