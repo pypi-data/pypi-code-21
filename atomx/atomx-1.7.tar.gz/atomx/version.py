@@ -1,0 +1,2 @@
+VERSION = '1.7'
+API_VERSION = 'v3'
