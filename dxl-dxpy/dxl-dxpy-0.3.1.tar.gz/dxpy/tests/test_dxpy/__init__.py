@@ -1,0 +1,1 @@
+from .test_dxpy_install import TestDxpy
