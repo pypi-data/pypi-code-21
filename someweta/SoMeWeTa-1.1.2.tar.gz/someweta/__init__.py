@@ -1,0 +1,5 @@
+from someweta import averaged_structured_perceptron
+from someweta import tagger
+
+AveragedStructuredPerceptron = averaged_structured_perceptron.AveragedStructuredPerceptron
+ASPTagger = tagger.ASPTagger
