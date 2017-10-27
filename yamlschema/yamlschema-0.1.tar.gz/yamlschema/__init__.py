@@ -1,0 +1,3 @@
+"""
+Validate YAML configuration files
+"""
