@@ -1,0 +1,1 @@
+from pythloghlp.dynamodb import DynamoHandler
