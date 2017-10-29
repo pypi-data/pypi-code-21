@@ -1,0 +1,11 @@
+__version__ = "0.3.15"
+__git_commiter_name__ = "Guy Rozendorn"
+__git_commiter_email__ = "guy@rzn.co.il"
+__git_branch__ = u'develop'
+__git_remote_tracking_branch__ = u'origin/develop'
+__git_remote_url__ = u'git@git.infinidat.com:host-opensource/infi.jira_cli.git'
+__git_head_hash__ = 'c999b424f9d43ffcc921ce2b6d73af380e5e9a97'
+__git_head_subject__ = u'Finished Release v0.3.15'
+__git_head_message__ = u'* develop:\n  HOSTDEV-2778 jissue plugins'
+__git_dirty_diff__ = u''
+__git_commit_date__ = '2017-10-29 14:00:51'
