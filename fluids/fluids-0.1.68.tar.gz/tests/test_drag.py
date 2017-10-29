@@ -1,0 +1,172 @@
+# -*- coding: utf-8 -*-
+'''Chemical Engineering Design Library (ChEDL). Utilities for process modeling.
+Copyright (C) 2016, 2017 Caleb Bell <Caleb.Andrew.Bell@gmail.com>
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.'''
+
+from fluids import *
+import numpy as np
+from numpy.testing import assert_allclose
+import pytest
+
+close = assert_allclose
+
+
+def test_drag():
+    Cd = Stokes(0.1)
+    close(Cd, 240.0)
+
+    # All examples from [1]_, in a table of calculated values, matches.
+    Cds = [Barati(200.), Barati(0.002)]
+    close(Cds, [0.7682237950389874, 12008.864343802072])
+
+    # All examples from [1]_, in a table of calculated values, matches.
+    Cds = [Barati_high(i) for i in [200, 0.002, 1E6]]
+    Cd_values = [0.7730544082789523, 12034.714777630921, 0.21254574397767056]
+    close(Cds, Cd_values)
+
+    Cds = [Rouse(i) for i in [200, 0.002]]
+    Cd_values = [0.6721320343559642, 12067.422039324994]
+    close(Cds, Cd_values)
+
+    Cds = [Engelund_Hansen(i) for i in [200, 0.002]]
+    Cd_values = [1.62, 12001.5]
+    close(Cds, Cd_values)
+
+    Cds = [Clift_Gauvin(i) for i in [200, 0.002]]
+    Cd_values = [0.7905400398000133, 12027.153270425813]
+    close(Cds, Cd_values)
+
+    Cds = [Morsi_Alexander(i) for i in [0.002, 0.5, 5., 50., 500., 25E2, 7.5E3, 1E5]]
+    Cd_values = [12000.0, 49.511199999999995, 6.899784, 1.500032, 0.549948, 0.408848, 0.4048818666666667, 0.50301667]
+    close(Cds, Cd_values)
+
+    Cds = [Graf(i) for i in [200, 0.002]]
+    Cd_values = [0.8520984424785725, 12007.237509093471]
+    close(Cds, Cd_values)
+
+    Cds = [Flemmer_Banks(i) for i in [200, 0.002]]
+    Cd_values = [0.7849169609270039, 12194.582998088363]
+    close(Cds, Cd_values)
+
+    Cds = [Khan_Richardson(i) for i in [200, 0.002]]
+    Cd_values = [0.7747572379211097, 12335.279663284822]
+    close(Cds, Cd_values)
+
+    Cds = [Swamee_Ojha(i) for i in [200, 0.002]]
+    Cd_values = [0.8490012397545713, 12006.510258198376]
+    close(Cds, Cd_values)
+
+    Cds = [Yen(i) for i in [200, 0.002]]
+    Cd_values = [0.7822647002187014, 12080.906446259793]
+    close(Cds, Cd_values)
+
+    Cds = [Haider_Levenspiel(i) for i in [200, 0.002]]
+    Cd_values = [0.7959551680251666, 12039.14121183969]
+    close(Cds, Cd_values)
+
+    Cds = [Cheng(i) for i in [200, 0.002]]
+    Cd_values = [0.7939143028294227, 12002.787740305668]
+    close(Cds, Cd_values)
+
+    Cds = [Terfous(i) for i in [200]]
+    Cd_values = [0.7814651149769638]
+    close(Cds, Cd_values)
+
+    Cds = [Mikhailov_Freire(i) for i in [200, 0.002]]
+    Cd_values = [0.7514111388018659, 12132.189886046555]
+    close(Cds, Cd_values)
+
+    Cds = [Clift(i) for i in [0.002, 0.5, 50., 500., 2500., 40000, 75000., 340000, 5E5]]
+    Cd_values = [12000.1875, 51.538273834491875, 1.5742657203722197, 0.5549240285782678, 0.40817983162668914, 0.4639066546786017, 0.49399935325210037, 0.4631617396760497, 0.5928043008238435]
+    close(Cds, Cd_values)
+
+    Cds = [Ceylan(i) for i in [200]]
+    Cd_values = [0.7816735980280175]
+    close(Cds, Cd_values)
+
+    Cds = [Almedeij(i) for i in [200, 0.002]]
+    Cd_values = [0.7114768646813396, 12000.000000391443]
+    close(Cds, Cd_values)
+
+    Cds = [Morrison(i) for i in [200, 0.002]]
+    Cd_values = [0.767731559965325, 12000.134917101897]
+    close(Cds, Cd_values)
+
+    Cd = Song_Xu(1.72525554724508000000)
+    assert_allclose(Cd, 17.1249219416881000000)
+    
+    Cd = Song_Xu(1.24798925062065, sphericity=0.64, S=0.55325984525397)
+    assert_allclose(Cd, 36.00464629658840)
+
+
+def test_drag_sphere():
+    Cd = drag_sphere(200)
+    assert_allclose(Cd, 0.7682237950389874)
+    
+    Cd = drag_sphere(1E6)
+    assert_allclose(Cd, 0.21254574397767056)
+    
+    Cd = drag_sphere(1E6, Method='Barati_high')
+    assert_allclose(Cd, 0.21254574397767056)
+    
+    Cd = drag_sphere(0.001)
+    assert_allclose(Cd, 24000.0)
+    
+    Cd = drag_sphere(0.05)
+    assert_allclose(Cd, 481.23769162684573)
+    
+    methods = sorted(drag_sphere(3E5, AvailableMethods=True))
+    method_known = ['Barati_high', 'Ceylan', 'Morrison', 'Clift', 'Almedeij']
+    assert sorted(method_known) == methods
+    
+    with pytest.raises(Exception):
+        drag_sphere(200, Method='BADMETHOD')
+        
+    with pytest.raises(Exception):
+        drag_sphere(1E7)
+        
+        
+def test_v_terminal():
+    v_t = v_terminal(D=70E-6, rhop=2600., rho=1000., mu=1E-3)
+    assert_allclose(v_t, 0.00414249724453)
+    
+    v_t = v_terminal(D=70E-9, rhop=2600., rho=1000., mu=1E-3)
+    assert_allclose(v_t, 4.271340888888889e-09)
+    
+    # [2] has a good example
+    v_t = v_terminal(D=70E-6, rhop=2.6E3, rho=1000., mu=1E-3)
+    assert_allclose(v_t, 0.004142497244531304)
+    # vs 0.00406 by [2], with the Oseen correlation not implemented here
+    # It also has another example
+    v_t = v_terminal(D=50E-6, rhop=2.8E3, rho=1000., mu=1E-3)
+    assert_allclose(v_t, 0.0024195143465496655)
+    # vs 0.002453 in [2]
+    
+    # Laminar example
+    v_t = v_terminal(D=70E-6, rhop=2600., rho=1000., mu=1E-1)
+    assert_allclose(v_t, 4.271340888888888e-05)
+
+
+def test_integrate_drag_sphere():
+    ans = integrate_drag_sphere(D=0.001, rhop=2200., rho=1.2, mu=1.78E-5, t=0.5, V=30, distance=True)
+    assert_allclose(ans, (9.686465044063436, 7.829454643649386))
+
+    ans = integrate_drag_sphere(D=0.001, rhop=2200., rho=1.2, mu=1.78E-5, t=0.5, V=30)
+    assert_allclose(ans, 9.686465044063436)
