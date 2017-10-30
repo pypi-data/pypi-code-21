@@ -1,0 +1,1 @@
+from .funcipy import funcify
