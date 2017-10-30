@@ -1,0 +1,307 @@
+from pyravendb.commands.raven_commands import GetTopologyCommand, GetStatisticsCommand
+from pyravendb.connection.requests_helpers import *
+from pyravendb.custom_exceptions import exceptions
+from OpenSSL import crypto
+from pyravendb.data.document_convention import DocumentConvention
+from threading import Lock, Thread
+from pyravendb.tools.utils import Utils
+from datetime import datetime, timedelta
+import time
+import requests
+import json
+import hashlib
+import os
+
+import logging
+
+logging.basicConfig(filename='requests_executor_info.log', level=logging.DEBUG)
+log = logging.getLogger()
+
+
+class RequestsExecutor(object):
+    def __init__(self, database_name, certificate, convention=None, **kwargs):
+        self._database_name = database_name
+        self._certificate = certificate
+        self.topology_etag = kwargs.get("topology_etag", 0)
+        self._last_return_response = datetime.utcnow()
+        self.convention = convention if convention is not None else DocumentConvention()
+        self._node_selector = kwargs.get("node_selector", None)
+        self._last_known_urls = None
+
+        self.headers = {"Accept": "application/json",
+                        "Raven-Client-Version": "4.0.0.0"}
+
+        self.update_topology_lock = Lock()
+        self.update_timer_lock = Lock()
+        self.lock = Lock()
+        self._disable_topology_updates = kwargs.get("disable_topology_updates", False)
+
+        self._failed_nodes_timers = {}
+        self.update_topology_timer = None
+        self._first_topology_update = None
+        self.cluster_token = None
+
+        self._closed = False
+
+    @staticmethod
+    def create(urls, database_name, certificate, convention=None):
+        executor = RequestsExecutor(database_name, certificate, convention)
+        executor.start_first_topology_thread(urls)
+        return executor
+
+    @staticmethod
+    def create_for_single_node(url, database_name, certificate):
+        topology = Topology(etag=-1, nodes=[ServerNode(url, database_name)])
+        return RequestsExecutor(database_name, certificate, node_selector=NodeSelector(topology), topology_etag=-2,
+                                disable_topology_updates=True)
+
+    def start_first_topology_thread(self, urls):
+        self._first_topology_update = Thread(target=self.first_topology_update, args=(urls,), daemon=True)
+        self._first_topology_update.start()
+
+    def execute(self, raven_command, should_retry=True):
+        if not hasattr(raven_command, 'raven_command'):
+            raise ValueError("Not a valid command")
+        topology_update = self._first_topology_update
+        if not self._disable_topology_updates:
+            if topology_update is None or topology_update.is_alive():
+                try:
+                    if topology_update is None:
+                        with self.lock:
+                            if self._first_topology_update is None:
+                                if self._last_known_urls is None:
+                                    raise exceptions.InvalidOperationException(
+                                        "No known topology and no previously known one, cannot proceed, likely a bug")
+                                self.start_first_topology_thread(self._last_known_urls)
+                            topology_update = self._first_topology_update
+                    topology_update.join()
+                except Exception as e:
+                    log.debug(str(e))
+                    with self.lock:
+                        if self._first_topology_update == topology_update:
+                            self._first_topology_update = None
+                    raise
+
+        if self._node_selector is None:
+            raise exceptions.InvalidOperationException("A connection with the server could not be established",
+                                                       "node_selector cannot be None, please check your connection "
+                                                       "or supply a valid node_selector")
+        chosen_node = self._node_selector.get_current_node()
+        return self.execute_with_node(chosen_node, raven_command, should_retry)
+
+    def execute_with_node(self, chosen_node, raven_command, should_retry):
+        while True:
+            raven_command.create_request(chosen_node)
+            node_index = 0 if self._node_selector is None else self._node_selector.current_node_index
+
+            with requests.session() as session:
+                raven_command.headers.update(self.headers)
+                if not self._disable_topology_updates:
+                    raven_command.headers["Topology-Etag"] = "\"{0}\"".format(self.topology_etag)
+
+                data = None if raven_command.data is None else \
+                    json.dumps(raven_command.data, default=self.convention.json_default_method)
+                start_time = time.time() * 1000
+                end_time = None
+                try:
+                    response = session.request(raven_command.method, url=raven_command.url, data=data,
+                                               cert=self._certificate, headers=raven_command.headers,
+                                               stream=raven_command.use_stream)
+                except Exception as e:
+                    end_time = time.time() * 1000
+                    if not should_retry:
+                        raise
+                    if not self.handle_server_down(chosen_node, node_index, raven_command, e):
+                        raise exceptions.AllTopologyNodesDownException(
+                            "Tried to send request to all configured nodes in the topology, "
+                            "all of them seem to be down or not responding.", e)
+
+                    chosen_node = self._node_selector.get_current_node()
+                    continue
+
+                finally:
+                    if not end_time:
+                        end_time = time.time() * 1000
+                    elapsed_time = end_time - start_time
+                    chosen_node.response_time = elapsed_time
+
+                if response is None:
+                    raise ValueError("response is invalid.")
+
+                if response.status_code == 404:
+                    return raven_command.set_response(None)
+                if response.status_code == 403:
+                    if self._certificate is not None:
+                        with open(self._certificate, 'rb') as pem:
+                            cert = crypto.load_certificate(crypto.FILETYPE_PEM, pem.read())
+                            name = str(cert.get_subject().get_components()[0][1])
+                    raise exceptions.AuthorizationException(
+                        "Forbidden access to " + chosen_node.database + "@" + chosen_node.url + ", " +
+                        ("a certificate is required." if self._certificate is None
+                         else name + " does not have permission to access it or is unknown.") +
+                        response.request.method + " " + response.request.path_url)
+                if response.status_code == 408 or response.status_code == 502 or response.status_code == 503 or response.status_code == 504:
+                    if len(raven_command.failed_nodes) == 1:
+                        node = list(raven_command.failed_nodes.keys())[0]
+                        raise exceptions.UnsuccessfulRequestException(node.url, raven_command.failed_nodes[node])
+
+                    self.handle_server_down(chosen_node, node_index, raven_command, None)
+                    chosen_node = self._node_selector.get_current_node()
+                    continue
+                if response.status_code == 409:
+                    # TODO: Conflict resolution
+                    # current implementation is temporary
+                    try:
+                        response = response.json()
+                        if "Error" in response:
+                            raise Exception(response["Message"], response["Type"])
+                    except ValueError:
+                        raise response.raise_for_status()
+
+                if "Refresh-Topology" in response.headers:
+                    self.update_topology(ServerNode(chosen_node.url, self._database_name))
+                self._last_return_response = datetime.utcnow()
+                return raven_command.set_response(response)
+
+    def first_topology_update(self, initial_urls):
+        error_list = []
+        for url in initial_urls:
+            try:
+                self.update_topology(ServerNode(url, self._database_name))
+                self.update_topology_timer = Utils.start_a_timer(60 * 5, self.update_topology_callback, daemon=True)
+                return
+            except Exception as e:
+                if len(initial_urls) == 0:
+                    self._last_known_urls = initial_urls
+                    raise exceptions.InvalidOperationException("Cannot get topology from server: " + url, e)
+                error_list.append((url, e))
+
+        # Failed to update topology trying update from cache
+        for url in initial_urls:
+            if self.try_load_from_cache(url):
+                return
+
+        self._last_known_urls = initial_urls
+        raise exceptions.AggregateException("Failed to retrieve cluster topology from all known nodes", error_list)
+
+    def try_load_from_cache(self, url):
+        server_hash = hashlib.md5(
+            "{0}{1}".format(url, self._database_name).encode(
+                'utf-8')).hexdigest()
+        topology_file_path = "{0}\{1}.raven-topology".format(os.getcwd(), server_hash)
+        try:
+            with open(topology_file_path, 'r') as topology_file:
+                json_file = json.load(topology_file)
+                self._node_selector = NodeSelector(
+                    Topology.convert_json_topology_to_entity(json_file))
+                self.topology_etag = -2
+                self.update_topology_timer = Utils.start_a_timer(60 * 5, self.update_topology_callback, daemon=True)
+                return True
+        except (FileNotFoundError, json.JSONDecodeError) as e:
+            log.info(e)
+        return False
+
+    def update_topology(self, node):
+        if self._closed:
+            return
+
+        if self.update_topology_lock.acquire(False):
+            try:
+                if self._closed:
+                    return False
+
+                command = GetTopologyCommand()
+                response = self.execute_with_node(node, command, should_retry=False)
+
+                hash_name = hashlib.md5(
+                    "{0}{1}".format(node.url, node.database).encode(
+                        'utf-8')).hexdigest()
+
+                topology_file = "{0}\{1}.raven-topology".format(os.getcwd(), hash_name)
+                try:
+                    with open(topology_file, 'w') as outfile:
+                        json.dump(response, outfile, ensure_ascii=False)
+                except (IOError, json.JSONDecodeError):
+                    pass
+
+                topology = Topology.convert_json_topology_to_entity(response)
+                if self._node_selector is None:
+                    self._node_selector = NodeSelector(topology)
+
+                elif self._node_selector.on_update_topology(topology):
+                    self.cancel_all_failed_nodes_timers()
+
+                self.topology_etag = self._node_selector.topology.etag
+            finally:
+                self.update_topology_lock.release()
+        else:
+            return False
+
+    def handle_server_down(self, chosen_node, node_index, command, e):
+        command.failed_nodes.update({chosen_node: {"url": command.url, "error": str(e), "type": type(e).__name__}})
+        node_selector = self._node_selector
+
+        if node_selector is not None and chosen_node not in self._failed_nodes_timers:
+            node_status = NodeStatus(self, node_index, chosen_node)
+            with self.update_timer_lock:
+                if self._failed_nodes_timers.get(chosen_node, None) is None:
+                    self._failed_nodes_timers.update({chosen_node: node_status})
+                    node_status.start_timer()
+
+            node_selector.on_failed_request(node_index)
+            current_node = node_selector.get_current_node()
+            if command.is_failed_with_node(current_node):
+                return False
+        return True
+
+    def cancel_all_failed_nodes_timers(self):
+        failed_nodes_timers = self._failed_nodes_timers
+        self._failed_nodes_timers.clear()
+        for _, timer in failed_nodes_timers.items():
+            timer.cancel()
+            timer.join()
+
+    def check_node_status(self, node_status):
+        if self._node_selector is not None:
+            nodes = self._node_selector.topology.nodes
+            if node_status.node_index >= len(nodes):
+                return
+            server_node = nodes[node_status.node_index]
+            if server_node is not node_status.node:
+                self.perform_health_check(server_node, node_status)
+
+    def perform_health_check(self, node, node_status):
+        command = GetStatisticsCommand(debug_tag="failure=check")
+        try:
+            self.execute_with_node(node, command, should_retry=False)
+
+        except Exception as e:
+            log.info("{0} is still down".format(node.cluster_tag), e)
+            failed_node_timer = self._failed_nodes_timers.get(node_status.node, None)
+            if failed_node_timer is not None:
+                failed_node_timer.start_timer()
+            return
+
+        failed_node_timer = self._failed_nodes_timers.pop(node_status.node, None)
+        if failed_node_timer:
+            del failed_node_timer
+
+        self._node_selector.restore_node_index(node_status.node_index)
+
+    def update_topology_callback(self):
+        time = datetime.utcnow()
+        if time - self._last_return_response <= timedelta(minutes=5):
+            return
+        try:
+            self.update_topology(self._node_selector.get_current_node())
+        except Exception as e:
+            log.info("Couldn't Update Topology from _updateTopologyTimer task", e)
+
+    def close(self):
+        if self._closed:
+            return
+
+        self._closed = True
+        self.cancel_all_failed_nodes_timers()
+        if self.update_topology_timer:
+            self.update_topology_timer.cancel()
