@@ -1,0 +1,3 @@
+"""
+Global configs of batch
+"""
