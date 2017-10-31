@@ -1,0 +1,114 @@
+from datetime import datetime
+import hashlib
+import logging
+
+import cachetools
+from scrapy import Request
+from scrapy.pipelines.files import FilesPipeline, S3FilesStore
+from .utils import format_timestamp, media_cdr_item
+
+
+logging.getLogger('botocore').setLevel(logging.WARNING)
+
+
+class CDRMediaPipeline(FilesPipeline):
+    """ A pipeline that downloads media items and puts them into "objects"
+    field of the CDR item according to CDR v3 schema.
+
+    Usage:
+
+    1. Add the pipeline to ITEM_PIPELINES in settings::
+
+        ITEM_PIPELINES = {
+            'scrapy_cdr.media_pipeline.CDRMediaPipeline': 1,
+        }
+
+    2. Set ``FILES_STORE`` as you would do for scrapy FilesPipeline.
+    3. Put urls to download into "objects" field of the cdr item in the
+       crawler, for example::
+
+        yield scrapy_cdr.utils.text_cdr_item(
+            response,
+            crawler_name='name',
+            team_name='team',
+            objects=['http://example.com/1.png', 'http://example.com/1.png'],
+        )
+
+    4. Optionally, customize ``CDRMediaPipeline``:
+
+       - ``FILES_MAX_CACHE`` set maximum size of the downloader cache, and is
+         10000 by default (unlike unbounded cache used in scrapy).
+
+       - Set ``CDR_S3_RELATIVE_URLS=False`` option to use
+         absolute URLs in ``objects`` array (``obj_stored_url``) when data is
+         stored to S3. By default, S3 URLs are relative, i.e. they don't
+         contain path and bucket. Local paths are always relative, regardless
+         of this option.
+
+    5. Optionally, subclass the ``CDRMediaPipeline`` and redefine some methods:
+
+       - ``media_request`` method if you want to
+         customize how media items are downloaded.
+       - ``s3_path`` method if you are storing media items in S3
+         (``FILES_STORE`` is "s3://...") and want to customize the S3 URL of
+         stored items. When URLs are absolute (``CDR_S3_RELATIVE_URLS = False``),
+         by default it is "https://" urls for public items
+         (if ``FILES_STORE_S3_ACL`` is ``public-read`` or ``public-read-write``),
+         and "s3://" for private items (default in scrapy).
+    """
+
+    def open_spider(self, spider):
+        super(CDRMediaPipeline, self).open_spider(spider)
+        max_cached = spider.settings.getint('FILES_MAX_CACHE', 10000)
+        if max_cached:  # 0 not supported here
+            self.spiderinfo.downloaded = cachetools.LRUCache(
+                maxsize=max_cached)
+        self.s3_relative_urls = spider.settings.getbool(
+            'CDR_S3_RELATIVE_URLS', True)
+
+    def media_request(self, url):
+        # Override to provide your own downloading logic
+        return Request(url)
+
+    def get_media_requests(self, item, info):
+        return [self.media_request(url) for url in item.get('objects', [])]
+
+    def media_to_download(self, request, info):
+        # downloaded items have already been filtered as duplicate
+        return None
+
+    def item_completed(self, results, item, info):
+        item['objects'] = []
+        for res in (x for ok, x in results if ok):
+            path = res['path']
+            if isinstance(self.store, S3FilesStore):
+                path = self.s3_path(path)
+            item['objects'].append(media_cdr_item(
+                res['url'],
+                stored_url=path,
+                headers=res['headers'],
+                timestamp_crawl=res['timestamp_crawl'],
+            ))
+        return item
+
+    def s3_path(self, path):
+        rel_path = "{}{}".format(self.store.prefix, path)
+        if self.s3_relative_urls:
+            return rel_path
+        if self.store.POLICY in {'public-read', 'public-read-write'}:
+            return 'https://{}.s3.amazonaws.com/{}'.format(
+                self.store.bucket, rel_path)
+        else:
+            return 's3://{}/{}'.format(self.store.bucket, rel_path)
+
+    def file_path(self, request, response=None, info=None):
+        assert response is not None
+        return hashlib.sha256(response.body).hexdigest().upper()
+
+    def media_downloaded(self, response, request, info):
+        result = super(CDRMediaPipeline, self)\
+            .media_downloaded(response, request, info)
+        result.pop('checksum', None)
+        result['headers'] = response.headers
+        result['timestamp_crawl'] = format_timestamp(datetime.utcnow())
+        return result
