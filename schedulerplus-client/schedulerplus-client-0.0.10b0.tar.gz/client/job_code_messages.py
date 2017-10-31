@@ -1,0 +1,10 @@
+#!/usr/bin/env python
+# coding: utf-8
+# Author caijiajia.cn
+# @ ALL RIGHTS RESERVED
+
+PREPARE_EXEC_ERROR_CODE = -200
+EXECUTE_JOB_ERROR_CODE = -201
+SUCCESS_CODE = 1000
+SUCCESS_MESSAGE = "OK"
+FAIL_MESSAGE = "FAILED"
