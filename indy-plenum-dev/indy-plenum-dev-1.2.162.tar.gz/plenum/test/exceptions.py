@@ -1,0 +1,2 @@
+class NotFullyConnected(Exception):
+    pass
