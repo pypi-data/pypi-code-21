@@ -1,0 +1,4 @@
+BS_SIZE = 'sm'
+
+STREAMFIELDS = '__all__'
+EXCLUDE_STREAMFIELDS = []
