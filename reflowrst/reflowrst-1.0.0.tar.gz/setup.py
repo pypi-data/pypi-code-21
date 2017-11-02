@@ -1,0 +1,15 @@
+from setuptools import setup
+
+setup(
+    name='reflowrst',
+    packages=['reflowrst'],
+    version='1.0.0',
+    description='Modify valid rst text to fit within given width',
+    long_description=open('README.rst').read(),
+    author='doakey3',
+    author_email='reflowrst.dmodo@spamgourmet.com',
+    url='https://github.com/doakey3/reflowrst',
+    download_url='https://github.com/doakey3/reflowrst/tarball/1.0.0',
+    license='MIT',
+    install_requires=['dashtable']
+)
