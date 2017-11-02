@@ -1,0 +1,14 @@
+from distutils.core import setup
+
+
+setup( name = "editorium",
+       url = "https://bitbucket.org/mjr129/editorium",
+       version = "0.0.0.5",
+       description = "Creates a Qt Editor for arbitrary Python Objects using Reflection.",
+       author = "Martin Rusilowicz",
+       license = "GNU AGPLv3",
+       packages = ["editorium"],
+       install_requires = ["py-flags",
+                           "sip",
+                           "PyQt5"]
+       )
