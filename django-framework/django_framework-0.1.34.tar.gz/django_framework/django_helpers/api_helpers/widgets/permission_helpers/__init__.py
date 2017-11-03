@@ -1,0 +1,1 @@
+from permission import is_authenticated
