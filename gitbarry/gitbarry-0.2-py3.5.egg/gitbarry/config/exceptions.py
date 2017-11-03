@@ -1,0 +1,2 @@
+class UnknownConfigSectionException(Exception):
+    pass
