@@ -1,0 +1,1 @@
+from .plague import Node
