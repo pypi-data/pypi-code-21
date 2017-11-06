@@ -1,0 +1,5 @@
+merchant_id = '0000000000'
+return_url = 'https://example.com/api/v1/emandates'
+url = 'https://portal.example.com/mandates/gateway'
+fingerprint = '00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00'
+password = 'password'
