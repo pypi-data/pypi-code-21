@@ -1,0 +1,1 @@
+from .slim_rest import SlimRest

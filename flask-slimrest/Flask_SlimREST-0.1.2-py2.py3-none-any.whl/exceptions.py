@@ -1,0 +1,2 @@
+class NoMatchingSchemaError(ValueError):
+    pass
