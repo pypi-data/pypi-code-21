@@ -1,0 +1,5 @@
+merchant_id = '0050010464'
+return_url = 'https://my.vck.tv/api/v1/emandates'
+url = 'https://portal-test.secure-ing.com/bvn-idx-routing/bvnGateway'
+fingerprint = '54:b3:58:1c:79:b6:35:5c:54:bb:2b:dd:9b:b6:13:17:a9:29:47:1a'
+password = 'pi60qpi60q'
