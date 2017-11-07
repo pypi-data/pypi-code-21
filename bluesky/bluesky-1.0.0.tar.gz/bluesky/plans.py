@@ -1,0 +1,1406 @@
+import sys
+import itertools
+from itertools import chain
+
+from collections import (Iterable, defaultdict)
+import time
+
+import numpy as np
+try:
+    # cytools is a drop-in replacement for toolz, implemented in Cython
+    from cytools import partition
+except ImportError:
+    from toolz import partition
+
+from . import plan_patterns
+
+from . import utils
+from .utils import Msg
+
+from . import preprocessors as bpp
+from . import plan_stubs as bps
+
+
+def count(detectors, num=1, delay=None, *, md=None):
+    """
+    Take one or more readings from detectors.
+
+    Parameters
+    ----------
+    detectors : list
+        list of 'readable' objects
+    num : integer, optional
+        number of readings to take; default is 1
+
+        If None, capture data until canceled
+    delay : iterable or scalar, optional
+        time delay between successive readings; default is 0
+    md : dict, optional
+        metadata
+
+    Notes
+    -----
+    If ``delay`` is an iterable, it must have at least ``num - 1`` entries or
+    the plan will raise a ``ValueError`` during iteration.
+    """
+    if num is None:
+        num_intervals = None
+    else:
+        num_intervals = num - 1
+    _md = {'detectors': [det.name for det in detectors],
+           'num_points': num,
+           'num_intervals': num_intervals,
+           'plan_args': {'detectors': list(map(repr, detectors)), 'num': num},
+           'plan_name': 'count',
+           'hints': {}
+           }
+    _md.update(md or {})
+    _md['hints'].setdefault('dimensions', [(('time',), 'primary')])
+
+    # If delay is a scalar, repeat it forever. If it is an iterable, leave it.
+    if not isinstance(delay, Iterable):
+        delay = itertools.repeat(delay)
+    else:
+        try:
+            num_delays = len(delay)
+        except TypeError:
+            # No way to tell in advance if we have enough delays.
+            pass
+        else:
+            if num - 1 > num_delays:
+                raise ValueError("num=%r but delays only provides %r "
+                                 "entries" % (num, num_delays))
+        delay = iter(delay)
+
+    @bpp.stage_decorator(detectors)
+    @bpp.run_decorator(md=_md)
+    def finite_plan():
+        for i in range(num):
+            now = time.time()  # Intercept the flow in its earliest moment.
+            yield Msg('checkpoint')
+            yield from bps.trigger_and_read(detectors)
+            try:
+                d = next(delay)
+            except StopIteration:
+                if i + 1 == num:
+                    break
+                else:
+                    # num specifies a number of iterations less than delay
+                    raise ValueError("num=%r but delays only provides %r "
+                                     "entries" % (num, i))
+            if d is not None:
+                d = d - (time.time() - now)
+                if d > 0:  # Sleep if and only if time is left to do it.
+                    yield Msg('sleep', None, d)
+
+    @bpp.stage_decorator(detectors)
+    @bpp.run_decorator(md=_md)
+    def infinite_plan():
+        while True:
+            yield Msg('checkpoint')
+            yield from bps.trigger_and_read(detectors)
+            try:
+                d = next(delay)
+            except StopIteration:
+                break
+            if d is not None:
+                yield Msg('sleep', None, d)
+
+    if num is None:
+        return (yield from infinite_plan())
+    else:
+        return (yield from finite_plan())
+
+
+def list_scan(detectors, motor, steps, *, per_step=None, md=None):
+    """
+    Scan over one variable in steps.
+
+    Parameters
+    ----------
+    detectors : list
+        list of 'readable' objects
+    motor : object
+        any 'setable' object (motor, temp controller, etc.)
+    steps : list
+        list of positions
+    per_step : callable, optional
+        hook for cutomizing action of inner loop (messages per step)
+        Expected signature:
+        ``f(detectors, motor, step) -> plan (a generator)``
+    md : dict, optional
+        metadata
+
+    See Also
+    --------
+    :func:`bluesky.plans.rel_list_scan`
+    """
+    _md = {'detectors': [det.name for det in detectors],
+           'motors': [motor.name],
+           'num_points': len(steps),
+           'num_intervals': len(steps) - 1,
+           'plan_args': {'detectors': list(map(repr, detectors)),
+                         'motor': repr(motor), 'steps': steps,
+                         'per_step': repr(per_step)},
+           'plan_name': 'list_scan',
+           'plan_pattern': 'array',
+           'plan_pattern_module': 'numpy',
+           'plan_pattern_args': dict(object=steps),
+           'hints': {},
+           }
+    _md.update(md or {})
+    try:
+        dimensions = [(motor.hints['fields'], 'primary')]
+    except (AttributeError, KeyError):
+        pass
+    else:
+        _md['hints'].setdefault('dimensions', dimensions)
+    if per_step is None:
+        per_step = bps.one_1d_step
+
+    @bpp.stage_decorator(list(detectors) + [motor])
+    @bpp.run_decorator(md=_md)
+    def inner_list_scan():
+        for step in steps:
+            yield from per_step(detectors, motor, step)
+
+    return (yield from inner_list_scan())
+
+
+def rel_list_scan(detectors, motor, steps, *, per_step=None, md=None):
+    """
+    Scan over one variable in steps relative to current position.
+
+    Parameters
+    ----------
+    detectors : list
+        list of 'readable' objects
+    motor : object
+        any 'setable' object (motor, temp controller, etc.)
+    steps : list
+        list of positions relative to current position
+    per_step : callable, optional
+        hook for cutomizing action of inner loop (messages per step)
+        Expected signature: ``f(detectors, motor, step)``
+    md : dict, optional
+        metadata
+
+    See Also
+    --------
+    :func:`bluesky.plans.list_scan`
+    """
+    # TODO read initial positions (redundantly) so they can be put in md here
+    _md = {'plan_name': 'rel_list_scan'}
+    _md.update(md or {})
+
+    @bpp.reset_positions_decorator([motor])
+    @bpp.relative_set_decorator([motor])
+    def inner_relative_list_scan():
+        return (yield from list_scan(detectors, motor, steps,
+                                     per_step=per_step, md=_md))
+    return (yield from inner_relative_list_scan())
+
+
+def scan(detectors, motor, start, stop, num, *, per_step=None, md=None):
+    """
+    Scan over one variable in equally spaced steps.
+
+    Parameters
+    ----------
+    detectors : list
+        list of 'readable' objects
+    motor : object
+        any 'setable' object (motor, temp controller, etc.)
+    start : float
+        starting position of motor
+    stop : float
+        ending position of motor
+    num : int
+        number of steps
+    per_step : callable, optional
+        hook for cutomizing action of inner loop (messages per step)
+        Expected signature: ``f(detectors, motor, step)``
+    md : dict, optional
+        metadata
+
+    See Also
+    --------
+    :func:`bluesky.plans.rel_scan`
+    """
+    _md = {'detectors': [det.name for det in detectors],
+           'motors': [motor.name],
+           'num_points': num,
+           'num_intervals': num - 1,
+           'plan_args': {'detectors': list(map(repr, detectors)), 'num': num,
+                         'motor': repr(motor),
+                         'start': start, 'stop': stop,
+                         'per_step': repr(per_step)},
+           'plan_name': 'scan',
+           'plan_pattern': 'linspace',
+           'plan_pattern_module': 'numpy',
+           'plan_pattern_args': dict(start=start, stop=stop, num=num),
+           'hints': {},
+           }
+    _md.update(md or {})
+    try:
+        dimensions = [(motor.hints['fields'], 'primary')]
+    except (AttributeError, KeyError):
+        pass
+    else:
+        _md['hints'].setdefault('dimensions', dimensions)
+
+    if per_step is None:
+        per_step = bps.one_1d_step
+
+    steps = np.linspace(**_md['plan_pattern_args'])
+
+    @bpp.stage_decorator(list(detectors) + [motor])
+    @bpp.run_decorator(md=_md)
+    def inner_scan():
+        for step in steps:
+            yield from per_step(detectors, motor, step)
+
+    return (yield from inner_scan())
+
+
+def rel_scan(detectors, motor, start, stop, num, *, per_step=None,
+             md=None):
+    """
+    Scan over one variable in equally spaced steps relative to current positon.
+
+    Parameters
+    ----------
+    detectors : list
+        list of 'readable' objects
+    motor : object
+        any 'setable' object (motor, temp controller, etc.)
+    start : float
+        starting position of motor
+    stop : float
+        ending position of motor
+    num : int
+        number of steps
+    per_step : callable, optional
+        hook for cutomizing action of inner loop (messages per step)
+        Expected signature: ``f(detectors, motor, step)``
+    md : dict, optional
+        metadata
+
+    See Also
+    --------
+    :func:`bluesky.plans.scan`
+    """
+    _md = {'plan_name': 'rel_scan'}
+    _md.update(md or {})
+    # TODO read initial positions (redundantly) so they can be put in md here
+
+    @bpp.reset_positions_decorator([motor])
+    @bpp.relative_set_decorator([motor])
+    def inner_relative_scan():
+        return (yield from scan(detectors, motor, start, stop,
+                                num, per_step=per_step, md=_md))
+
+    return (yield from inner_relative_scan())
+
+
+def log_scan(detectors, motor, start, stop, num, *, per_step=None, md=None):
+    """
+    Scan over one variable in log-spaced steps.
+
+    Parameters
+    ----------
+    detectors : list
+        list of 'readable' objects
+    motor : object
+        any 'setable' object (motor, temp controller, etc.)
+    start : float
+        starting position of motor
+    stop : float
+        ending position of motor
+    num : int
+        number of steps
+    per_step : callable, optional
+        hook for cutomizing action of inner loop (messages per step)
+        Expected signature: ``f(detectors, motor, step)``
+    md : dict, optional
+        metadata
+
+    See Also
+    --------
+    :func:`bluesky.plans.rel_log_scan`
+    """
+    _md = {'detectors': [det.name for det in detectors],
+           'motors': [motor.name],
+           'num_points': num,
+           'num_intervals': num - 1,
+           'plan_args': {'detectors': list(map(repr, detectors)), 'num': num,
+                         'start': start, 'stop': stop, 'motor': repr(motor),
+                         'per_step': repr(per_step)},
+           'plan_name': 'log_scan',
+           'plan_pattern': 'logspace',
+           'plan_pattern_module': 'numpy',
+           'plan_pattern_args': dict(start=start, stop=stop, num=num),
+           'hints': {},
+           }
+    _md.update(md or {})
+
+    try:
+        dimensions = [(motor.hints['fields'], 'primary')]
+    except (AttributeError, KeyError):
+        pass
+    else:
+        _md['hints'].setdefault('dimensions', dimensions)
+
+    if per_step is None:
+        per_step = bps.one_1d_step
+
+    steps = np.logspace(**_md['plan_pattern_args'])
+
+    @bpp.stage_decorator(list(detectors) + [motor])
+    @bpp.run_decorator(md=_md)
+    def inner_log_scan():
+        for step in steps:
+            yield from per_step(detectors, motor, step)
+
+    return (yield from inner_log_scan())
+
+
+def rel_log_scan(detectors, motor, start, stop, num, *, per_step=None,
+                 md=None):
+    """
+    Scan over one variable in log-spaced steps relative to current position.
+
+    Parameters
+    ----------
+    detectors : list
+        list of 'readable' objects
+    motor : object
+        any 'setable' object (motor, temp controller, etc.)
+    start : float
+        starting position of motor
+    stop : float
+        ending position of motor
+    num : int
+        number of steps
+    per_step : callable, optional
+        hook for cutomizing action of inner loop (messages per step)
+        Expected signature: ``f(detectors, motor, step)``
+    md : dict, optional
+        metadata
+
+    See Also
+    --------
+    :func:`bluesky.plans.log_scan`
+    """
+    # TODO read initial positions (redundantly) so they can be put in md here
+    _md = {'plan_name': 'rel_log_scan'}
+    _md.update(md or {})
+
+    @bpp.reset_positions_decorator([motor])
+    @bpp.relative_set_decorator([motor])
+    def inner_relative_log_scan():
+        return (yield from log_scan(detectors, motor, start, stop, num,
+                                    per_step=per_step, md=_md))
+
+    return (yield from inner_relative_log_scan())
+
+
+def adaptive_scan(detectors, target_field, motor, start, stop,
+                  min_step, max_step, target_delta, backstep,
+                  threshold=0.8, *, md=None):
+    """
+    Scan over one variable with adaptively tuned step size.
+
+    Parameters
+    ----------
+    detectors : list
+        list of 'readable' objects
+    target_field : string
+        data field whose output is the focus of the adaptive tuning
+    motor : object
+        any 'setable' object (motor, temp controller, etc.)
+    start : float
+        starting position of motor
+    stop : float
+        ending position of motor
+    min_step : float
+        smallest step for fast-changing regions
+    max_step : float
+        largest step for slow-chaning regions
+    target_delta : float
+        desired fractional change in detector signal between steps
+    backstep : bool
+        whether backward steps are allowed -- this is concern with some motors
+    threshold : float, optional
+        threshold for going backward and rescanning a region, default is 0.8
+    md : dict, optional
+        metadata
+
+    See Also
+    --------
+    :func:`bluesky.plans.rel_adaptive_scan`
+    """
+    if not 0 < min_step < max_step:
+        raise ValueError("min_step and max_step must meet condition of "
+                         "max_step > min_step > 0")
+
+    _md = {'detectors': [det.name for det in detectors],
+           'motors': [motor.name],
+           'plan_args': {'detectors': list(map(repr, detectors)),
+                         'motor': repr(motor),
+                         'start': start,
+                         'stop': stop,
+                         'min_step': min_step,
+                         'max_step': max_step,
+                         'target_delta': target_delta,
+                         'backstep': backstep,
+                         'threshold': threshold},
+           'plan_name': 'adaptive_scan',
+           'hints': {},
+           }
+    _md.update(md or {})
+    try:
+        dimensions = [(motor.hints['fields'], 'primary')]
+    except (AttributeError, KeyError):
+        pass
+    else:
+        _md['hints'].setdefault('dimensions', dimensions)
+
+    @bpp.stage_decorator(list(detectors) + [motor])
+    @bpp.run_decorator(md=_md)
+    def adaptive_core():
+        next_pos = start
+        step = (max_step - min_step) / 2
+        past_I = None
+        cur_I = None
+        cur_det = {}
+        if stop >= start:
+            direction_sign = 1
+        else:
+            direction_sign = -1
+        while next_pos * direction_sign < stop * direction_sign:
+            yield Msg('checkpoint')
+            yield from bps.mv(motor, next_pos)
+            yield Msg('create', None, name='primary')
+            for det in detectors:
+                yield Msg('trigger', det, group='B')
+            yield Msg('wait', None, 'B')
+            for det in utils.separate_devices(detectors + [motor]):
+                cur_det = yield Msg('read', det)
+                if target_field in cur_det:
+                    cur_I = cur_det[target_field]['value']
+            yield Msg('save')
+
+            # special case first first loop
+            if past_I is None:
+                past_I = cur_I
+                next_pos += step * direction_sign
+                continue
+
+            dI = np.abs(cur_I - past_I)
+
+            slope = dI / step
+            if slope:
+                new_step = np.clip(target_delta / slope, min_step, max_step)
+            else:
+                new_step = np.min([step * 1.1, max_step])
+
+            # if we over stepped, go back and try again
+            if backstep and (new_step < step * threshold):
+                next_pos -= step
+                step = new_step
+            else:
+                past_I = cur_I
+                step = 0.2 * new_step + 0.8 * step
+            next_pos += step * direction_sign
+
+    return (yield from adaptive_core())
+
+
+def rel_adaptive_scan(detectors, target_field, motor, start, stop,
+                      min_step, max_step, target_delta, backstep,
+                      threshold=0.8, *, md=None):
+    """
+    Relative scan over one variable with adaptively tuned step size.
+
+    Parameters
+    ----------
+    detectors : list
+        list of 'readable' objects
+    target_field : string
+        data field whose output is the focus of the adaptive tuning
+    motor : object
+        any 'setable' object (motor, temp controller, etc.)
+    start : float
+        starting position of motor
+    stop : float
+        ending position of motor
+    min_step : float
+        smallest step for fast-changing regions
+    max_step : float
+        largest step for slow-chaning regions
+    target_delta : float
+        desired fractional change in detector signal between steps
+    backstep : bool
+        whether backward steps are allowed -- this is concern with some motors
+    threshold : float, optional
+        threshold for going backward and rescanning a region, default is 0.8
+    md : dict, optional
+        metadata
+
+    See Also
+    --------
+    :func:`bluesky.plans.adaptive_scan`
+    """
+    _md = {'plan_name': 'rel_adaptive_scan'}
+    _md.update(md or {})
+
+    @bpp.reset_positions_decorator([motor])
+    @bpp.relative_set_decorator([motor])
+    def inner_relative_adaptive_scan():
+        return (yield from adaptive_scan(detectors, target_field,
+                                         motor, start, stop, min_step,
+                                         max_step, target_delta,
+                                         backstep, threshold, md=_md))
+
+    return (yield from inner_relative_adaptive_scan())
+
+
+def tune_centroid(
+        detectors, signal, motor,
+        start, stop, min_step,
+        num=10,
+        step_factor=2,
+        snake=False,
+        *, md=None):
+    """
+    plan: tune a motor to the centroid of signal(motor)
+
+    Initially, traverse the range from start to stop with
+    the number of points specified.  Repeat with progressively
+    smaller step size until the minimum step size is reached.
+    Rescans will be centered on the signal centroid
+    (for $I(x)$, centroid$= \sum{I}/\sum{x*I}$)
+    with a scan range of 2*step_factor*step of current scan.
+
+    Set `snake=True` if your positions are reproducible
+    moving from either direction.  This will not necessarily
+    decrease the number of traversals required to reach convergence.
+    Snake motion reduces the total time spent on motion
+    to reset the positioner.  For some positioners, such as
+    those with hysteresis, snake scanning may not be appropriate.
+    For such positioners, always approach the positions from the
+    same direction.
+
+    Note:  Ideally the signal has only one peak in the range to
+    be scanned.  It is assumed the signal is not polymodal
+    between `start` and `stop`.
+
+    Parameters
+    ----------
+    detectors : Signal
+        list of 'readable' objects
+    signal : string
+        detector field whose output is to maximize
+    motor : object
+        any 'setable' object (motor, temp controller, etc.)
+    start : float
+        start of range
+    stop : float
+        end of range, note: start < stop
+    min_step : float
+        smallest step size to use.
+    num : int, optional
+        number of points with each traversal, default = 10
+    step_factor : float, optional
+        used in calculating range when
+        maximum is found, note: step_factor > 0, default = 2
+    snake : bool, optional
+        if False (default), always scan from start to stop
+    md : dict, optional
+        metadata
+
+    Examples
+    --------
+    Find the center of a peak using synthetic hardware.
+
+    >>> from ophyd.sim import SynAxis, SynGauss
+    >>> motor = SynAxis(name='motor')
+    >>> det = SynGauss(name='det', motor, 'motor',
+    ...                center=-1.3, Imax=1e5, sigma=0.05)
+    >>> RE(tune_centroid([det], "det", motor, -1.5, -0.5, 0.01, 10))
+    """
+    if min_step <= 0:
+        raise ValueError("min_step must be positive")
+    if step_factor <= 0:
+        raise ValueError("step_factor must be positive")
+    if (num - 2) <= 2*step_factor:
+        raise ValueError(
+            "Increase num and/or decrease step_factor"
+            " or tune_centroid will never converge to a solution"
+        )
+    try:
+        motor_name, = motor.hints['fields']
+    except (AttributeError, ValueError):
+        motor_name = motor.name
+    _md = {'detectors': [det.name for det in detectors],
+           'motors': [motor.name],
+           'plan_args': {'detectors': list(map(repr, detectors)),
+                         'motor': repr(motor),
+                         'start': start,
+                         'stop': stop,
+                         'num': num,
+                         'min_step': min_step, },
+           'plan_name': 'tune_centroid',
+           'hints': {},
+           }
+    _md.update(md or {})
+    try:
+        dimensions = [(motor.hints['fields'], 'primary')]
+    except (AttributeError, KeyError):
+        pass
+    else:
+        _md['hints'].setdefault('dimensions', dimensions)
+
+    low_limit = min(start, stop)
+    high_limit = max(start, stop)
+
+    @bpp.stage_decorator(list(detectors) + [motor])
+    @bpp.run_decorator(md=_md)
+    def _tune_core(start, stop, num, signal):
+        next_pos = start
+        step = (stop - start) / (num - 1)
+        peak_position = None
+        cur_I = None
+        sum_I = 0       # for peak centroid calculation, I(x)
+        sum_xI = 0
+
+        while abs(step) >= min_step:
+            yield Msg('checkpoint')
+            yield from bps.mv(motor, next_pos)
+            ret = (yield from bps.trigger_and_read(detectors + [motor]))
+            cur_I = ret[signal]['value']
+            sum_I += cur_I
+            position = ret[motor_name]['value']
+            sum_xI += position * cur_I
+
+            if (stop - start) < abs(stop - start):
+                in_range = start >= next_pos >= stop  # negative motion
+            else:
+                in_range = start <= next_pos <= stop  # positive motion
+
+            if in_range:
+                next_pos += step
+            else:
+                if sum_I == 0:
+                    return
+                peak_position = sum_xI / sum_I  # centroid
+                # improvement: report current peak_position somehow
+                start = np.clip(peak_position - step_factor*step,
+                                low_limit, high_limit)
+                stop = np.clip(peak_position + step_factor*step,
+                               low_limit, high_limit)
+                if snake:
+                    start, stop = stop, start
+                step = (stop - start) / (num - 1)
+                next_pos = start
+
+        # finally, move to peak position
+        if peak_position is not None:
+            # improvement: report final peak_position
+            yield from bps.mv(motor, peak_position)
+
+    return (yield from _tune_core(start, stop, num, signal))
+
+
+def scan_nd(detectors, cycler, *, per_step=None, md=None):
+    """
+    Scan over an arbitrary N-dimensional trajectory.
+
+    Parameters
+    ----------
+    detectors : list
+    cycler : Cycler
+        list of dictionaries mapping motors to positions
+    per_step : callable, optional
+        hook for cutomizing action of inner loop (messages per step)
+        See docstring of bluesky.plan_stubs.one_nd_step (the default) for
+        details.
+    md : dict, optional
+        metadata
+
+    See Also
+    --------
+    :func:`bluesky.plans.inner_product_scan`
+    :func:`bluesky.plans.grid_scan`
+    """
+    _md = {'detectors': [det.name for det in detectors],
+           'motors': [motor.name for motor in cycler.keys],
+           'num_points': len(cycler),
+           'num_intervals': len(cycler) - 1,
+           'plan_args': {'detectors': list(map(repr, detectors)),
+                         'cycler': repr(cycler),
+                         'per_step': repr(per_step)},
+           'plan_name': 'scan_nd',
+           'hints': {},
+           }
+    _md.update(md or {})
+    try:
+        dimensions = [(motor.hints['fields'], 'primary')
+                      for motor in cycler.keys]
+    except (AttributeError, KeyError):
+        # Not all motors provide a 'fields' hint, so we have to skip it.
+        pass
+    else:
+        # We know that hints exists. Either:
+        #  - the user passed it in and we are extending it
+        #  - the user did not pass it in and we got the default {}
+        # If the user supplied hints includes a dimension entry, do not
+        # change it, else set it to the one generated above
+        _md['hints'].setdefault('dimensions', dimensions)
+
+    if per_step is None:
+        per_step = bps.one_nd_step
+    pos_cache = defaultdict(lambda: None)  # where last position is stashed
+    cycler = utils.merge_cycler(cycler)
+    motors = list(cycler.keys)
+
+    @bpp.stage_decorator(list(detectors) + motors)
+    @bpp.run_decorator(md=_md)
+    def inner_scan_nd():
+        for step in list(cycler):
+            yield from per_step(detectors, step, pos_cache)
+
+    return (yield from inner_scan_nd())
+
+
+def inner_product_scan(detectors, num, *args, per_step=None, md=None):
+    """
+    Scan over one multi-motor trajectory.
+
+    Parameters
+    ----------
+    detectors : list
+        list of 'readable' objects
+    num : integer
+        number of steps
+    ``*args`` : {Positioner, Positioner, int}
+        patterned like (``motor1, start1, stop1, ..., motorN, startN, stopN``)
+        Motors can be any 'setable' object (motor, temp controller, etc.)
+    per_step : callable, optional
+        hook for cutomizing action of inner loop (messages per step)
+        See docstring of bluesky.plan_stubs.one_nd_step (the default) for
+        details.
+    md : dict, optional
+        metadata
+
+    See Also
+    --------
+    :func:`bluesky.plans.relative_inner_product_scan`
+    :func:`bluesky.plans.grid_scan`
+    :func:`bluesky.plans.scan_nd`
+    """
+    md_args = list(chain(*((repr(motor), start, stop)
+                           for motor, start, stop in partition(3, args))))
+    motor_names = tuple(motor.name for motor, start, stop
+                        in partition(3, args))
+    _md = {'plan_args': {'detectors': list(map(repr, detectors)),
+                         'num': num, 'args': md_args,
+                         'per_step': repr(per_step)},
+           'plan_name': 'inner_product_scan',
+           'plan_pattern': 'inner_product',
+           'plan_pattern_module': plan_patterns.__name__,
+           'plan_pattern_args': dict(num=num, args=md_args),
+           'motors': motor_names
+           }
+    _md.update(md or {})
+
+    full_cycler = plan_patterns.inner_product(num=num, args=args)
+
+    return (yield from scan_nd(detectors, full_cycler,
+                               per_step=per_step, md=_md))
+
+
+def grid_scan(detectors, *args, per_step=None, md=None):
+    """
+    Scan over a mesh; each motor is on an independent trajectory.
+
+    Parameters
+    ----------
+    detectors : list
+        list of 'readable' objects
+    ``*args``
+        patterned like (``motor1, start1, stop1, num1,```
+                        ``motor2, start2, stop2, num2, snake2,``
+                        ``motor3, start3, stop3, num3, snake3,`` ...
+                        ``motorN, startN, stopN, numN, snakeN``)
+
+        The first motor is the "slowest", the outer loop. For all motors
+        except the first motor, there is a "snake" argument: a boolean
+        indicating whether to following snake-like, winding trajectory or a
+        simple left-to-right trajectory.
+    per_step : callable, optional
+        hook for cutomizing action of inner loop (messages per step)
+        See docstring of bluesky.plan_stubs.one_nd_step (the default) for
+        details.
+    md : dict, optional
+        metadata
+
+    See Also
+    --------
+    :func:`bluesky.plans.rel_grid_scan`
+    :func:`bluesky.plans.inner_product_scan`
+    :func:`bluesky.plans.scan_nd`
+    """
+    full_cycler = plan_patterns.outer_product(args=list(args))
+
+    chunk_args = list(plan_patterns.chunk_outer_product_args(args))
+
+    md_args = []
+    motor_names = []
+    motors = []
+    for i, (motor, start, stop, num, snake) in enumerate(chunk_args):
+        md_args.extend([repr(motor), start, stop, num])
+        if i > 0:
+            # snake argument only shows up after the first motor
+            md_args.append(snake)
+        motor_names.append(motor.name)
+        motors.append(motor)
+    _md = {'shape': tuple(num for motor, start, stop, num, snake
+                          in chunk_args),
+           'extents': tuple([start, stop] for motor, start, stop, num, snake
+                            in chunk_args),
+           'snaking': tuple(snake for motor, start, stop, num, snake
+                            in chunk_args),
+           # 'num_points': inserted by scan_nd
+           'plan_args': {'detectors': list(map(repr, detectors)),
+                         'args': md_args,
+                         'per_step': repr(per_step)},
+           'plan_name': 'grid_scan',
+           'plan_pattern': 'outer_product',
+           'plan_pattern_args': dict(args=md_args),
+           'plan_pattern_module': plan_patterns.__name__,
+           'motors': tuple(motor_names),
+           'hints': {},
+           }
+    _md.update(md or {})
+    _md['hints'].setdefault('gridding', 'rectilinear')
+    try:
+        _md['hints'].setdefault('dimensions', [(m.hints['fields'], 'primary')
+                                               for m in motors])
+    except (AttributeError, KeyError):
+        ...
+
+    return (yield from scan_nd(detectors, full_cycler,
+                               per_step=per_step, md=_md))
+
+
+def rel_grid_scan(detectors, *args, per_step=None, md=None):
+    """
+    Scan over a mesh relative to current position.
+
+    Parameters
+    ----------
+    detectors : list
+        list of 'readable' objects
+    ``*args``
+        patterned like ``motor1, start1, stop1, num1, motor2, start2, stop2,
+        num2, snake2,`` ..., ``motorN, startN, stopN, numN, snakeN``
+        Motors can be any 'setable' object (motor, temp controller, etc.)
+        Notice that the first motor is followed by start, stop, num.
+        All other motors are followed by start, stop, num, snake where snake
+        is a boolean indicating whether to following snake-like, winding
+        trajectory or a simple left-to-right trajectory.
+    per_step : callable, optional
+        hook for cutomizing action of inner loop (messages per step)
+        See docstring of bluesky.plan_stubs.one_nd_step (the default) for
+        details.
+    md : dict, optional
+        metadata
+
+    See Also
+    --------
+    :func:`bluesky.plans.relative_inner_product_scan`
+    :func:`bluesky.plans.grid_scan`
+    :func:`bluesky.plans.scan_nd`
+    """
+    _md = {'plan_name': 'rel_grid_scan'}
+    _md.update(md or {})
+    motors = [m[0] for m in
+              plan_patterns.chunk_outer_product_args(args)]
+
+    @bpp.reset_positions_decorator(motors)
+    @bpp.relative_set_decorator(motors)
+    def inner_rel_grid_scan():
+        return (yield from grid_scan(detectors, *args,
+                                     per_step=per_step, md=_md))
+
+    return (yield from inner_rel_grid_scan())
+
+
+def relative_inner_product_scan(detectors, num, *args, per_step=None, md=None):
+    """
+    Scan over one multi-motor trajectory relative to current position.
+
+    Parameters
+    ----------
+    detectors : list
+        list of 'readable' objects
+    num : integer
+        number of steps
+    ``*args``
+        patterned like (``motor1, start1, stop1, ..., motorN, startN, stopN``)
+        Motors can be any 'setable' object (motor, temp controller, etc.)
+    per_step : callable, optional
+        hook for cutomizing action of inner loop (messages per step)
+        See docstring of bluesky.plan_stubs.one_nd_step (the default) for
+        details.
+    md : dict, optional
+        metadata
+
+    See Also
+    --------
+    :func:`bluesky.plans.rel_grid_scan`
+    :func:`bluesky.plans.inner_product_scan`
+    :func:`bluesky.plans.scan_nd`
+    """
+    _md = {'plan_name': 'relative_inner_product_scan'}
+    _md.update(md or {})
+    motors = [motor for motor, start, stop in partition(3, args)]
+
+    @bpp.reset_positions_decorator(motors)
+    @bpp.relative_set_decorator(motors)
+    def inner_relative_inner_product_scan():
+        return (yield from inner_product_scan(detectors, num, *args,
+                                              per_step=per_step, md=_md))
+
+    return (yield from inner_relative_inner_product_scan())
+
+
+def tweak(detector, target_field, motor, step, *, md=None):
+    """
+    Move and motor and read a detector with an interactive prompt.
+
+    Parameters
+    ----------
+    detetector : Device
+    target_field : string
+        data field whose output is the focus of the adaptive tuning
+    motor : Device
+    step : float
+        initial suggestion for step size
+    md : dict, optional
+        metadata
+    """
+    prompt_str = '{0}, {1:.3}, {2:.3}, ({3}) '
+
+    _md = {'detectors': [detector.name],
+           'motors': [motor.name],
+           'plan_args': {'detector': repr(detector),
+                         'target_field': target_field,
+                         'motor': repr(motor),
+                         'step': step},
+           'plan_name': 'tweak',
+           'hints': {},
+           }
+    try:
+        dimensions = [(motor.hints['fields'], 'primary')]
+    except (AttributeError, KeyError):
+        pass
+    else:
+        _md['hints'].update({'dimensions': dimensions})
+    _md.update(md or {})
+    d = detector
+    try:
+        from IPython.display import clear_output
+    except ImportError:
+        # Define a no-op for clear_output.
+        def clear_output(wait=False):
+            pass
+
+    @bpp.stage_decorator([detector, motor])
+    @bpp.run_decorator(md=_md)
+    def tweak_core():
+        nonlocal step
+
+        while True:
+            yield Msg('create', None, name='primary')
+            ret_mot = yield Msg('read', motor)
+            if ret_mot is None:
+                return
+            key = list(ret_mot.keys())[0]
+            pos = ret_mot[key]['value']
+            yield Msg('trigger', d, group='A')
+            yield Msg('wait', None, 'A')
+            reading = yield Msg('read', d)
+            val = reading[target_field]['value']
+            yield Msg('save')
+            prompt = prompt_str.format(motor.name, float(pos),
+                                       float(val), step)
+            new_step = yield Msg('input', prompt=prompt)
+            if new_step:
+                try:
+                    step = float(new_step)
+                except ValueError:
+                    break
+            yield Msg('set', motor, pos + step, group='A')
+            print('Motor moving...')
+            sys.stdout.flush()
+            yield Msg('wait', None, 'A')
+            clear_output(wait=True)
+            # stackoverflow.com/a/12586667/380231
+            print('\x1b[1A\x1b[2K\x1b[1A')
+
+    return (yield from tweak_core())
+
+
+def spiral_fermat(detectors, x_motor, y_motor, x_start, y_start, x_range,
+                  y_range, dr, factor, *, tilt=0.0, per_step=None, md=None):
+    '''Absolute fermat spiral scan, centered around (x_start, y_start)
+
+    Parameters
+    ----------
+    detectors : list
+        list of 'readable' objects
+    x_motor : object
+        any 'setable' object (motor, temp controller, etc.)
+    y_motor : object
+        any 'setable' object (motor, temp controller, etc.)
+    x_start : float
+        x center
+    y_start : float
+        y center
+    x_range : float
+        x width of spiral
+    y_range : float
+        y width of spiral
+    dr : float
+        delta radius
+    factor : float
+        radius gets divided by this
+    tilt : float, optional
+        Tilt angle in radians, default 0.0
+    per_step : callable, optional
+        hook for cutomizing action of inner loop (messages per step)
+        See docstring of bluesky.plan_stubs.one_nd_step (the default) for
+        details.
+    md : dict, optional
+        metadata
+
+    See Also
+    --------
+    :func:`bluesky.plans.spiral`
+    :func:`bluesky.plans.rel_spiral`
+    :func:`bluesky.plans.rel_spiral_fermat`
+    '''
+    pattern_args = dict(x_motor=x_motor, y_motor=y_motor, x_start=x_start,
+                        y_start=y_start, x_range=x_range, y_range=y_range,
+                        dr=dr, factor=factor, tilt=tilt)
+    cyc = plan_patterns.spiral_fermat(**pattern_args)
+
+    # Before including pattern_args in metadata, replace objects with reprs.
+    pattern_args['x_motor'] = repr(x_motor)
+    pattern_args['y_motor'] = repr(y_motor)
+    _md = {'plan_args': {'detectors': list(map(repr, detectors)),
+                         'x_motor': repr(x_motor), 'y_motor': repr(y_motor),
+                         'x_start': x_start, 'y_start': y_start,
+                         'x_range': x_range, 'y_range': y_range,
+                         'dr': dr, 'factor': factor, 'tilt': tilt,
+                         'per_step': repr(per_step)},
+           'extents': tuple([[x_start - x_range, x_start + x_range],
+                             [y_start - y_range, y_start + y_range]]),
+           'plan_name': 'spiral_fermat',
+           'plan_pattern': 'spiral_fermat',
+           'plan_pattern_module': plan_patterns.__name__,
+           'plan_pattern_args': pattern_args,
+           'hints': {},
+           }
+    try:
+        dimensions = [(x_motor.hints['fields'], 'primary'),
+                      (y_motor.hints['fields'], 'primary')]
+    except (AttributeError, KeyError):
+        pass
+    else:
+        _md['hints'].update({'dimensions': dimensions})
+    _md.update(md or {})
+
+    return (yield from scan_nd(detectors, cyc, per_step=per_step, md=_md))
+
+
+def rel_spiral_fermat(detectors, x_motor, y_motor, x_range, y_range, dr,
+                      factor, *, tilt=0.0, per_step=None, md=None):
+    '''Relative fermat spiral scan
+
+    Parameters
+    ----------
+    detectors : list
+        list of 'readable' objects
+    x_motor : object
+        any 'setable' object (motor, temp controller, etc.)
+    y_motor : object
+        any 'setable' object (motor, temp controller, etc.)
+    x_range : float
+        x width of spiral
+    y_range : float
+        y width of spiral
+    dr : float
+        delta radius
+    factor : float
+        radius gets divided by this
+    tilt : float, optional
+        Tilt angle in radians, default 0.0
+    per_step : callable, optional
+        hook for cutomizing action of inner loop (messages per step)
+        See docstring of bluesky.plan_stubs.one_nd_step (the default) for
+        details.
+    md : dict, optional
+        metadata
+
+    See Also
+    --------
+    :func:`bluesky.plans.spiral`
+    :func:`bluesky.plans.rel_spiral`
+    :func:`bluesky.plans.spiral_fermat`
+    '''
+    _md = {'plan_name': 'rel_spiral_fermat'}
+    _md.update(md or {})
+    return (yield from spiral_fermat(detectors, x_motor, y_motor,
+                                     x_motor.position,
+                                     y_motor.position, x_range,
+                                     y_range, dr, factor, tilt=tilt,
+                                     per_step=per_step, md=_md))
+
+
+def spiral(detectors, x_motor, y_motor, x_start, y_start, x_range, y_range, dr,
+           nth, *, tilt=0.0, per_step=None, md=None):
+    '''Spiral scan, centered around (x_start, y_start)
+
+    Parameters
+    ----------
+    x_motor : object
+        any 'setable' object (motor, temp controller, etc.)
+    y_motor : object
+        any 'setable' object (motor, temp controller, etc.)
+    x_start : float
+        x center
+    y_start : float
+        y center
+    x_range : float
+        x width of spiral
+    y_range : float
+        y width of spiral
+    dr : float
+        Delta radius
+    nth : float
+        Number of theta steps
+    tilt : float, optional
+        Tilt angle in radians, default 0.0
+    per_step : callable, optional
+        hook for cutomizing action of inner loop (messages per step)
+        See docstring of bluesky.plan_stubs.one_nd_step (the default) for
+        details.
+    md : dict, optional
+        metadata
+
+    See Also
+    --------
+    :func:`bluesky.plans.rel_spiral`
+    :func:`bluesky.plans.spiral_fermat`
+    :func:`bluesky.plans.rel_spiral_fermat`
+    '''
+    pattern_args = dict(x_motor=x_motor, y_motor=y_motor, x_start=x_start,
+                        y_start=y_start, x_range=x_range, y_range=y_range,
+                        dr=dr, nth=nth, tilt=tilt)
+    cyc = plan_patterns.spiral(**pattern_args)
+
+    # Before including pattern_args in metadata, replace objects with reprs.
+    pattern_args['x_motor'] = repr(x_motor)
+    pattern_args['y_motor'] = repr(y_motor)
+    _md = {'plan_args': {'detectors': list(map(repr, detectors)),
+                         'x_motor': repr(x_motor), 'y_motor': repr(y_motor),
+                         'x_start': x_start, 'y_start': y_start,
+                         'x_range': x_range, 'y_range': y_range,
+                         'dr': dr, 'nth': nth, 'tilt': tilt,
+                         'per_step': repr(per_step)},
+           'extents': tuple([[x_start - x_range, x_start + x_range],
+                             [y_start - y_range, y_start + y_range]]),
+           'plan_name': 'spiral',
+           'plan_pattern': 'spiral',
+           'plan_pattern_args': pattern_args,
+           'plan_pattern_module': plan_patterns.__name__,
+           'hints': {},
+           }
+    try:
+        dimensions = [(x_motor.hints['fields'], 'primary'),
+                      (y_motor.hints['fields'], 'primary')]
+    except (AttributeError, KeyError):
+        pass
+    else:
+        _md['hints'].update({'dimensions': dimensions})
+    _md.update(md or {})
+
+    return (yield from scan_nd(detectors, cyc, per_step=per_step, md=_md))
+
+
+def rel_spiral(detectors, x_motor, y_motor, x_range, y_range, dr, nth,
+               *, tilt=0.0, per_step=None, md=None):
+    '''Relative spiral scan
+
+    Parameters
+    ----------
+    x_motor : object
+        any 'setable' object (motor, temp controller, etc.)
+    y_motor : object
+        any 'setable' object (motor, temp controller, etc.)
+    x_start : float
+        x center
+    y_start : float
+        y center
+    x_range : float
+        x width of spiral
+    y_range : float
+        y width of spiral
+    dr : float
+        Delta radius
+    nth : float
+        Number of theta steps
+    tilt : float, optional
+        Tilt angle in radians, default 0.0
+    per_step : callable, optional
+        hook for cutomizing action of inner loop (messages per step)
+        See docstring of bluesky.plan_stubs.one_nd_step (the default) for
+        details.
+    md : dict, optional
+        metadata
+
+    See Also
+    --------
+    :func:`bluesky.plans.spiral`
+    :func:`bluesky.plans.spiral_fermat`
+    '''
+    _md = {'plan_name': 'rel_spiral_fermat'}
+    _md.update(md or {})
+    return (yield from spiral(detectors, x_motor, y_motor,
+                              x_motor.position, y_motor.position,
+                              x_range, y_range, dr, nth, tilt=tilt,
+                              per_step=per_step, md=_md))
+
+
+def ramp_plan(go_plan,
+              monitor_sig,
+              inner_plan_func,
+              timeout=None,
+              period=None, md=None):
+    '''Take data while ramping one or more positioners.
+
+    The pseudo code for this plan is ::
+
+       sts = (yield from go_plan)
+
+       yield from open_run()
+       yield from inner_plan_func()
+       while not st.done:
+           yield from inner_plan_func()
+       yield from inner_plan_func()
+
+       yield from close_run()
+
+    Parameters
+    ----------
+    go_plan : generator
+        plan to start the ramp.  This will be run inside of a open/close
+        run.
+
+        This plan must return a `ophyd.StatusBase` object.
+
+    inner_plan_func : generator function
+        generator which takes no input
+
+        This will be called for every data point.  This should create
+        one or more events.
+
+    timeout : float, optional
+        If not None, the maximum time the ramp can run.
+
+        In seconds
+
+    period : fload, optional
+        If not None, take data no faster than this.  If None, take
+        data as fast as possible
+
+        If running the inner plan takes longer than `period` than take
+        data with no dead time.
+
+        In seconds.
+    '''
+    _md = {'plan_name': 'ramp_plan'}
+    _md.update(md or {})
+
+    @bpp.monitor_during_decorator((monitor_sig,))
+    @bpp.run_decorator(md=_md)
+    def polling_plan():
+        fail_time = None
+        if timeout is not None:
+            # sort out if we should watch the clock
+            fail_time = time.time() + timeout
+
+        # take a 'pre' data point
+        yield from inner_plan_func()
+        # start the ramp
+        status = (yield from go_plan)
+
+        while not status.done:
+            start_time = time.time()
+            yield from inner_plan_func()
+            if fail_time is not None:
+                if time.time() > fail_time:
+                    raise utils.RampFail()
+            if period is not None:
+                cur_time = time.time()
+                wait_time = (start_time + period) - cur_time
+                if wait_time > 0:
+                    yield from bps.sleep(wait_time)
+            # take a 'post' data point
+        yield from inner_plan_func()
+
+    return (yield from polling_plan())
+
+
+def fly(flyers, *, md=None):
+    """
+    Perform a fly scan with one or more 'flyers'.
+
+    Parameters
+    ----------
+    flyers : collection
+        objects that support the flyer interface
+    md : dict, optional
+        metadata
+
+    Yields
+    ------
+    msg : Msg
+        'kickoff', 'wait', 'complete, 'wait', 'collect' messages
+
+    See Also
+    --------
+    :func:`bluesky.plans.fly_during`
+    """
+    yield from bps.open_run(md)
+    for flyer in flyers:
+        yield from bps.kickoff(flyer, wait=True)
+    for flyer in flyers:
+        yield from bps.complete(flyer, wait=True)
+    for flyer in flyers:
+        yield from bps.collect(flyer)
+    yield from bps.close_run()
+
+
+relative_list_scan = rel_list_scan  # back-compat
+relative_scan = rel_scan  # back-compat
+relative_log_scan = rel_log_scan  # back-compat
+relative_adaptive_scan = rel_adaptive_scan  # back-compat
+outer_product_scan = grid_scan  # back-compat
+relative_outer_product_scan = rel_grid_scan  # back-compat
+relative_spiral_fermat = rel_spiral_fermat  # back-compat
+relative_spiral = rel_spiral  # back-compat
