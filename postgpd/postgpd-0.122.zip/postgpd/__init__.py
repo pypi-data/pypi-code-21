@@ -1,0 +1,1 @@
+from postgpd import dbase
