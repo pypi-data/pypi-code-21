@@ -1,0 +1,10 @@
+'''iterate print item in nested list which in another list'''
+
+def recurseList(srcList,indent=0):
+        for item in srcList:
+                if isinstance(item,list):
+                        recurseList(item,indent+1)
+                else:
+                        for i in range(indent):
+                                print('\t',end='')
+                        print(item)
