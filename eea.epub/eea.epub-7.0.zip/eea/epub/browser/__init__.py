@@ -1,0 +1,2 @@
+""" Browser package Init
+"""
