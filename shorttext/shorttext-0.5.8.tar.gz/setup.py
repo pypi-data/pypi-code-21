@@ -1,0 +1,56 @@
+from setuptools import setup, Extension
+
+def readme():
+    with open('README.md') as f:
+        return f.read()
+
+setup(name='shorttext',
+      version="0.5.8",
+      description="Short Text Categorization",
+      long_description="Supervised learning algorithms for short text categorization using embedded word vectors such as Word2Vec, or immediate feature vectors using topic models",
+      classifiers=[
+          "Topic :: Scientific/Engineering :: Artificial Intelligence",
+          "Natural Language :: English",
+          "Topic :: Scientific/Engineering :: Mathematics",
+          "Programming Language :: Python :: 2.7",
+          "License :: OSI Approved :: MIT License",
+      ],
+      keywords="short text natural language processing text mining",
+      url="https://github.com/stephenhky/PyShortTextCategorization",
+      author="Kwan-Yuet Ho",
+      author_email="stephenhky@yahoo.com.hk",
+      license='MIT',
+      packages=['shorttext',
+                'shorttext.utils',
+                'shorttext.classifiers',
+                'shorttext.classifiers.embed',
+                'shorttext.classifiers.embed.nnlib',
+                'shorttext.classifiers.embed.sumvec',
+                'shorttext.classifiers.bow',
+                'shorttext.classifiers.bow.topic',
+                'shorttext.classifiers.bow.maxent',
+                'shorttext.data',
+                'shorttext.stack',
+                'shorttext.generators',
+                'shorttext.generators.bow',
+                'shorttext.metrics',
+                'shorttext.metrics.dynprog',
+                'shorttext.metrics.wasserstein',
+                'shorttext.metrics.embedfuzzy'],
+      package_dir={'shorttext': 'shorttext'},
+      package_data={'shorttext': ['data/*.csv', 'utils/*.pkl', 'metrics/dynprog/*.c', 'metric/dynprog/*.h']},
+      setup_requires=['numpy'],
+      install_requires=[
+          'numpy>=1.11.3', 'scipy>=0.18.1', 'scikit-learn', 'keras>=2.0.0', 'gensim>=3.0.0', 'pandas', 'spacy>=1.7.0', 'stemming', 'pulp',
+      ],
+      tests_require=[
+          'unittest2', 'keras>=2.0.0', 'gensim>=2.2.0',
+      ],
+      scripts=['bin/ShortTextCategorizerConsole',
+               'bin/ShortTextWord2VecSimilarity',
+               'bin/switch_kerasbackend'],
+      # include_package_data=False,
+      test_suite="test",
+      ext_modules = [Extension('_dldist', sources=['shorttext/metrics/dynprog/dldist_wrap.c',
+                                                   'shorttext/metrics/dynprog/dldist.c'])],
+      zip_safe=False)
