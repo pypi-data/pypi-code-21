@@ -1,0 +1,2 @@
+""" RDF extensions for geotags
+"""
