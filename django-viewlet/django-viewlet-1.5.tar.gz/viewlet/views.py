@@ -1,0 +1,20 @@
+# coding=utf-8
+from __future__ import unicode_literals
+import django
+from django.http import HttpResponse
+from django.template.context import RequestContext
+import viewlet
+from viewlet.loaders import querydict_to_kwargs
+
+
+def viewlet_view(request, name):
+    if django.VERSION >= (1, 8):
+        context = {}
+        kwargs = {'request': request}
+    else:
+        context = RequestContext(request)
+        kwargs = {}
+
+    kwargs.update(querydict_to_kwargs(request.GET))
+    output = viewlet.call(name, context, **kwargs)
+    return HttpResponse(output)
