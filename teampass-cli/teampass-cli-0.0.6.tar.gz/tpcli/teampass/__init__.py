@@ -1,0 +1,1 @@
+from teampass import TeampassClient
