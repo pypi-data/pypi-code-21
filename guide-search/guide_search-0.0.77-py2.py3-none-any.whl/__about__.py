@@ -1,0 +1,10 @@
+__title__ = 'guide-search'
+__description__ = 'Guidance management api'
+__url__ = 'https://github.com/johnpickerill/guide-search'
+__version_info__ = ('0', '0', '77')
+__version__ = '.'.join(__version_info__)
+__author__ = 'John Pickerill'
+__author_email__ = 'john.pickerill@landregistry.gov.uk'
+__maintainer__ = 'Land Registry'
+__license__ = 'MIT'
+__copyright__ = '(c) 2017 by John Pickerill'
