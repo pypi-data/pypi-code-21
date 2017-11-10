@@ -1,0 +1,1 @@
+from .spendtime import main
