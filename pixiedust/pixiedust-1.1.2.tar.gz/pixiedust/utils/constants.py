@@ -1,0 +1,1 @@
+PIXIEDUST_REPO_URL = 'https://github.com/ibm-watson-data-lab/pixiedust'
