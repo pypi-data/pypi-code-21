@@ -1,0 +1,103 @@
+import os
+import shutil
+from lxml import etree
+from lxml import objectify
+
+def checkKnownIssues(filename, xml_doc):
+    result = ""
+    if filename.find("_75_") > 0:
+        result = "LOACTION_NR"
+        print("Known error in: ", filename, " found <LOACTION_NR>, expecting <LOCATION_NR>")
+    elif filename.find("_76_") > 0:
+            result = "GARAGE_NR"
+            print("Known error in: ", filename, " found <GARAGE_NR>, expecting <GARAGE_NUMBER>")
+    elif filename.find("_77_") > 0:
+        result = "GARAGE_NR"
+        print("Known error in: ", filename, " found <GARAGE_NR>, expecting <GARAGE_NUMBER>")
+    elif filename.find("_28_") > 0:
+        result = "SIFT_SEQUENCE"
+        print("Known error in: ", filename, " found <SIFT_SEQUENCE>, expecting <SHIFT_SEQUENCE>")
+    return result
+
+
+def getMessageType(xmlobj, filename):
+    messageType = xmlobj.find(".//MESSAGE_TYPE")
+    if messageType == "":
+        # print('DCS_MESSAGES.find(".//REF_XML_OUT_FILENAME")', DCS_MESSAGES.find(".//REF_XML_OUT_FILENAME"))
+        fn = xmlobj.find(".//REF_XML_OUT_FILENAME")
+        list = fn.split("_")
+        if list.__len__() > 1:
+            messageType = list[1]
+    if messageType == "":
+        list = filename.split("_")
+        if list.__len__() > 1:
+            messageType = list[1]
+    #print(" Message type: ", messageType)
+    return messageType
+
+def getVehicle(xmlobj, filename):
+    vehicle = xmlobj.find(".//MOBILE_ID")
+    if vehicle == "":
+        fn = xmlobj.find(".//REF_XML_OUT_FILENAME")
+        vehicle = filename[-9:-4]
+        # list = filename.split("_.")
+        # if list.__len__() > 1:
+        #     vehicle = list[1]
+    if vehicle == "":
+        vehicle = filename[-9:-4]
+        # list = filename.split("_.")
+        # if list.__len__() > 1:
+        #     vehicle = list[1]
+    print(" Vehicle: ", vehicle)
+    return vehicle
+
+
+def getFilenameFromXml(xmlobj, filename):
+    filenameFromXml = xmlobj.find(".//REF_XML_OUT_FILENAME")
+    if filenameFromXml == "":
+        filenameFromXml = filename
+    #print(" filenameFromXml: ", filenameFromXml)
+    return filenameFromXml
+
+
+def get_files(path):
+     for (dirpath, _, filenames) in os.walk(path):
+         for filename in filenames:
+             yield os.path.join(dirpath, filename)
+
+def xmlTreeFromFile(filename):
+        xmlTree = objectify.parse(filename)
+        return xmlTree
+
+def xsdFromFile(filename):
+    #xmlschema_doc = xmlTreeFromFile(filename)
+    xmlschema_doc = etree.parse(filename)
+    xsd = etree.XMLSchema(xmlschema_doc)
+    return xsd
+
+def validXML(xml_doc, xmlschema):
+    return xmlschema.validate(xml_doc)
+
+def copyFile(source, destination):
+    try:
+        destinationDir = os.path.dirname(destination)
+        if not os.path.exists(destinationDir):
+            os.mkdir(destinationDir)
+        shutil.copy(source, destination)
+    except:
+        shutil.copy(source, destination+'1')
+
+def moveFileToDir(source, destination):
+    try:
+        destinationDir = os.path.dirname(destination)
+        if not os.path.exists(destinationDir):
+            os.mkdir(destinationDir)
+        shutil.move(source, destination)
+    except:
+        shutil.move(source, destination+'1')
+
+def printXML(root):
+    for element in root.iter():
+        print("%s - %s" % (element.tag, element.text))
+
+
