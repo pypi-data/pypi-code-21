@@ -1,0 +1,1 @@
+from .lemmatiseur import Lemmatiseur
