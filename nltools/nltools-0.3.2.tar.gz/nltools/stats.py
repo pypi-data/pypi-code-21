@@ -1,0 +1,566 @@
+from __future__ import division
+
+'''
+NeuroLearn Statistics Tools
+===========================
+
+Tools to help with statistical analyses.
+
+'''
+
+__all__ = ['pearson',
+            'zscore',
+            'fdr',
+            'holm_bonf',
+            'threshold',
+            'multi_threshold',
+            'winsorize',
+            'trim',
+            'calc_bpm',
+            'downsample',
+            'upsample',
+            'fisher_r_to_z',
+            'one_sample_permutation',
+            'two_sample_permutation',
+            'correlation_permutation',
+            'summarize_bootstrap']
+
+import numpy as np
+import pandas as pd
+from scipy.stats import pearsonr, spearmanr, kendalltau, norm
+from copy import deepcopy
+import nibabel as nib
+from scipy.interpolate import interp1d
+import warnings
+import itertools
+from joblib import Parallel, delayed
+
+def pearson(x, y):
+    """ Correlates row vector x with each row vector in 2D array y.
+    From neurosynth.stats.py - author: Tal Yarkoni
+    """
+    data = np.vstack((x, y))
+    ms = data.mean(axis=1)[(slice(None, None, None), None)]
+    datam = data - ms
+    datass = np.sqrt(np.sum(datam*datam, axis=1))
+    # datass = np.sqrt(ss(datam, axis=1))
+    temp = np.dot(datam[1:], datam[0].T)
+    rs = temp / (datass[1:] * datass[0])
+    return rs
+
+def zscore(df):
+    """ zscore every column in a pandas dataframe or series.
+
+        Args:
+            df: Pandas DataFrame instance
+
+        Returns:
+            z_data: z-scored pandas DataFrame or series instance
+    """
+
+    if isinstance(df, pd.DataFrame):
+        return df.apply(lambda x: (x - x.mean())/x.std())
+    elif isinstance(df, pd.Series):
+        return (df-np.mean(df))/np.std(df)
+    else:
+        raise ValueError("Data is not a Pandas DataFrame or Series instance")
+
+def fdr(p, q=.05):
+    """ Determine FDR threshold given a p value array and desired false
+    discovery rate q. Written by Tal Yarkoni
+
+    Args:
+        p: vector of p-values (numpy array) (only considers non-zero p-values)
+        q: false discovery rate level
+
+    Returns:
+        fdr_p: p-value threshold based on independence or positive dependence
+
+    """
+
+    if not isinstance(p, np.ndarray):
+        raise ValueError('Make sure vector of p-values is a numpy array')
+
+    s = np.sort(p)
+    nvox = p.shape[0]
+    null = np.array(range(1, nvox + 1), dtype='float') * q / nvox
+    below = np.where(s <= null)[0]
+    fdr_p = s[max(below)] if any(below) else -1
+    return fdr_p
+
+def holm_bonf(p, alpha=.05):
+    """ Compute corrected p-values based on the Holm-Bonferroni method, i.e. step-down procedure applying iteratively less correction to highest p-values. Modified from stats.models approach.
+
+    Args:
+        p: vector of p-values (numpy array)
+        alpha: alpha level
+
+    Returns:
+        p_corrected: numpy array of corrected p-values
+
+    """
+
+    if not isinstance(p, np.ndarray):
+        raise ValueError('Make sure vector of p-values is a numpy array')
+
+    idx = p.argsort()
+    s = p[idx]
+    s *= np.arange(len(s),0,-1)
+    s = np.maximum.accumulate(s)
+    p_corrected = np.empty_like(p)
+    p_corrected[idx] = s
+
+    return p_corrected
+
+def threshold(stat, p, thr=.05):
+    """ Threshold test image by p-value from p image
+
+    Args:
+        stat: Brain_Data instance of arbitrary statistic metric (e.g., beta,
+            t, etc)
+        p: Brain_data instance of p-values
+            threshold: p-value to threshold stat image
+
+    Returns:
+        out: Thresholded Brain_Data instance
+
+    """
+    from nltools.data import Brain_Data
+
+    if not isinstance(stat, Brain_Data):
+        raise ValueError('Make sure stat is a Brain_Data instance')
+
+    if not isinstance(p, Brain_Data):
+        raise ValueError('Make sure p is a Brain_Data instance')
+
+    # Create Mask
+    mask = deepcopy(p)
+    if thr > 0:
+        mask.data = (mask.data < thr).astype(int)
+    else:
+        mask.data = np.zeros(len(mask.data), dtype=int)
+
+    # Apply Threshold Mask
+    out = deepcopy(stat)
+    if np.sum(mask.data) > 0:
+        out = out.apply_mask(mask)
+        out.data = out.data.squeeze()
+    else:
+        out.data = np.zeros(len(mask.data), dtype=int)
+
+    return out
+
+def multi_threshold(t_map, p_map,thresh):
+    """ Threshold test image by multiple p-value from p image
+
+    Args:
+        stat: Brain_Data instance of arbitrary statistic metric
+            (e.g., beta, t, etc)
+        p: Brain_data instance of p-values
+            threshold: list of p-values to threshold stat image
+
+    Returns:
+        out: Thresholded Brain_Data instance
+
+    """
+    from nltools.data import Brain_Data
+
+    if not isinstance(t_map, Brain_Data):
+        raise ValueError('Make sure stat is a Brain_Data instance')
+
+    if not isinstance(p_map, Brain_Data):
+        raise ValueError('Make sure p is a Brain_Data instance')
+
+    if not isinstance(thresh, list):
+        raise ValueError('Make sure thresh is a list of p-values')
+
+    affine = t_map.to_nifti().get_affine()
+    pos_out = np.zeros(t_map.to_nifti().shape)
+    neg_out = deepcopy(pos_out)
+    for thr in thresh:
+        t = threshold(t_map, p_map, thr=thr)
+        t_pos = deepcopy(t)
+        t_pos.data = np.zeros(len(t_pos.data))
+        t_neg = deepcopy(t_pos)
+        t_pos.data[t.data > 0] = 1
+        t_neg.data[t.data < 0] = 1
+        pos_out = pos_out+t_pos.to_nifti().get_data()
+        neg_out = neg_out+t_neg.to_nifti().get_data()
+    pos_out = pos_out + neg_out*-1
+    return Brain_Data(nib.Nifti1Image(pos_out, affine))
+
+def winsorize(data, cutoff=None,replace_with_cutoff=True):
+    ''' Winsorize a Pandas DataFrame or Series with the largest/lowest value not considered outlier
+
+        Args:
+            data: a pandas.DataFrame or pandas.Series
+            cutoff: a dictionary with keys {'std':[low,high]} or
+                    {'quantile':[low,high]}
+            replace_with_cutoff (default: False): If True, replace outliers with cutoff.
+                    If False, replaces outliers with closest existing values.
+        Returns:
+            winsorized pandas.DataFrame or pandas.Series
+    '''
+    df = data.copy() # to avoid overwriting original dataframe
+    def winsorize_sub(data,cutoff=None):
+        if not isinstance(data,pd.Series):
+            raise ValueError('Make sure that you are applying winsorize to a '
+                            'pandas series.')
+
+        if isinstance(cutoff,dict):
+            if 'quantile' in cutoff:
+                q = data.quantile(cutoff['quantile'])
+            elif 'std' in cutoff:
+                std = [data.mean()-data.std()*cutoff['std'][0], data.mean()+data.std()*cutoff['std'][1]]
+                q = pd.Series(index=cutoff['std'], data=std)
+            if not replace_with_cutoff:
+                q.iloc[0] = data[data > q.iloc[0]].min()
+                q.iloc[1] = data[data < q.iloc[1]].max()
+        else:
+            raise ValueError('cutoff must be a dictionary with quantile '
+                            'or std keys.')
+        if isinstance(q, pd.Series) and len(q) == 2:
+            data[data < q.iloc[0]] = q.iloc[0]
+            data[data > q.iloc[1]] = q.iloc[1]
+        return data
+
+    if isinstance(df,pd.DataFrame):
+        for col in df.columns:
+            df.loc[:,col] = winsorize_sub(df.loc[:,col],cutoff=cutoff)
+        return df
+    elif isinstance(df,pd.Series):
+        return winsorize_sub(df,cutoff=cutoff)
+    else:
+        raise ValueError('Data must be a pandas DataFrame or Series')
+
+def trim(data, cutoff=None):
+    ''' Trim a Pandas DataFrame or Series by replacing outlier values with NaNs
+
+        Args:
+            data: a pandas.DataFrame or pandas.Series
+            cutoff: a dictionary with keys {'std':[low,high]} or
+                    {'quantile':[low,high]}
+        Returns:
+            trimmed pandas.DataFrame or pandas.Series
+    '''
+    df = data.copy() # to avoid overwriting original dataframe
+    def trim_sub(data,cutoff=None):
+        if not isinstance(data,pd.Series):
+            raise ValueError('Make sure that you are applying trim to a '
+                            'pandas series.')
+
+        if isinstance(cutoff,dict):
+            if 'quantile' in cutoff:
+                q = data.quantile(cutoff['quantile'])
+            elif 'std' in cutoff:
+                std = [data.mean()-data.std()*cutoff['std'][0], data.mean()+data.std()*cutoff['std'][1]]
+                q = pd.Series(index=cutoff['std'], data=std)
+        else:
+            raise ValueError('cutoff must be a dictionary with quantile '
+                            'or std keys.')
+        if isinstance(q, pd.Series) and len(q) == 2:
+            data[data < q.iloc[0]] = np.nan
+            data[data > q.iloc[1]] = np.nan
+        return data
+
+    if isinstance(df,pd.DataFrame):
+        for col in df.columns:
+            df.loc[:,col] = trim_sub(df.loc[:,col],cutoff=cutoff)
+        return df
+    elif isinstance(df,pd.Series):
+        return trim_sub(df,cutoff=cutoff)
+    else:
+        raise ValueError('Data must be a pandas DataFrame or Series')
+
+def calc_bpm(beat_interval, sampling_freq):
+    ''' Calculate instantaneous BPM from beat to beat interval
+
+        Args:
+            beat_interval: number of samples in between each beat
+                            (typically R-R Interval)
+            sampling_freq: sampling frequency in Hz
+
+        Returns:
+            bpm:  beats per minute for time interval
+    '''
+    return 60*sampling_freq*(1/(beat_interval))
+
+def downsample(data,sampling_freq=None, target=None, target_type='samples',
+            method='mean'):
+    ''' Downsample pandas to a new target frequency or number of samples
+        using averaging.
+
+        Args:
+            data: Pandas DataFrame or Series
+                    sampling_freq:  Sampling frequency of data
+            target: downsampling target
+                    target_type: type of target can be [samples,seconds,hz]
+            method: (str) type of downsample method ['mean','median'],
+                    default: mean
+        Returns:
+            downsampled pandas object
+
+    '''
+
+    if not isinstance(data,(pd.DataFrame,pd.Series)):
+        raise ValueError('Data must by a pandas DataFrame or Series instance.')
+    if not (method=='median') | (method=='mean'):
+        raise ValueError("Metric must be either 'mean' or 'median' ")
+
+    if target_type is 'samples':
+        n_samples = target
+    elif target_type is 'seconds':
+        n_samples = target*sampling_freq
+    elif target_type is 'hz':
+        n_samples = sampling_freq/target
+    else:
+        raise ValueError('Make sure target_type is "samples", "seconds", '
+                        ' or "hz".')
+
+    idx = np.sort(np.repeat(np.arange(1,data.shape[0]/n_samples,1),n_samples))
+    # if data.shape[0] % n_samples:
+    if data.shape[0] > len(idx):
+        idx = np.concatenate([idx, np.repeat(idx[-1]+1,data.shape[0]-len(idx))])
+    if method=='mean':
+        return data.groupby(idx).mean()
+    elif method=='median':
+        return data.groupby(idx).median()
+
+def upsample(data,sampling_freq=None, target=None, target_type='samples',method='linear'):
+    ''' Upsample pandas to a new target frequency or number of samples using interpolation.
+
+        Args:
+            data: Pandas Series or DataFrame (Note: will drop non-numeric columns from DataFrame)
+            sampling_freq:  Sampling frequency of data
+            target: downsampling target
+            target_type: type of target can be [samples,seconds,hz]
+            method: (str) ('linear', 'nearest', 'zero', 'slinear', 'quadratic', 'cubic'
+                    where 'zero', 'slinear', 'quadratic' and 'cubic' refer to a spline
+                    interpolation of zeroth, first, second or third order)
+                    default: linear
+        Returns:
+            upsampled pandas object
+
+    '''
+
+    methods = ['linear', 'nearest', 'zero', 'slinear', 'quadratic', 'cubic']
+    if not method in methods:
+        raise ValueError("Method must be 'linear', 'nearest', 'zero', 'slinear', 'quadratic', 'cubic'")
+
+    if target_type is 'samples':
+        n_samples = target
+    elif target_type is 'seconds':
+        n_samples = target*sampling_freq
+    elif target_type is 'hz':
+        n_samples = sampling_freq/target
+    else:
+        raise ValueError('Make sure target_type is "samples", "seconds", or "hz".')
+
+    orig_spacing = np.arange(0,data.shape[0],1)
+    new_spacing = np.arange(0,data.shape[0]-1,n_samples)
+
+    if isinstance(data,pd.Series):
+        interpolate = interp1d(orig_spacing,data,kind=method)
+        return interpolate(new_spacing)
+    elif isinstance(data,pd.DataFrame):
+        numeric_data = data._get_numeric_data()
+        if data.shape[1] != numeric_data.shape[1]:
+            warnings.warn('Dropping %s non-numeric columns' % (data.shape[1] - numeric_data.shape[1]), UserWarning)
+        out = pd.DataFrame(columns=numeric_data.columns, index=None)
+        for i,x in numeric_data.iteritems():
+            interpolate = interp1d(orig_spacing, x, kind=method)
+            out.loc[:, i] = interpolate(new_spacing)
+        return out
+    else:
+        raise ValueError('Data must by a pandas DataFrame or Series instance.')
+
+def fisher_r_to_z(r):
+    ''' Use Fisher transformation to convert correlation to z score '''
+
+    return .5*np.log((1+r)/(1-r))
+
+def _permute_sign(dat):
+    return np.mean(dat*np.random.choice([1, -1], len(dat)))
+
+def _permute_group(data):
+    perm_label = np.random.permutation(data['Group'])
+    return (np.mean(data.loc[perm_label==1, 'Values']) -
+            np.mean(data.loc[perm_label==0, 'Values']))
+
+def one_sample_permutation(data, n_permute=5000, n_jobs=-1):
+    ''' One sample permutation test using randomization.
+
+        Args:
+            data: Pandas DataFrame or Series or numpy array
+            n_permute: (int) number of permutations
+            n_jobs: (int) The number of CPUs to use to do the computation.
+                    -1 means all CPUs.
+
+        Returns:
+            stats: (dict) dictionary of permutation results ['mean','p']
+
+    '''
+
+    data = np.array(data)
+    stats = dict()
+    stats['mean'] = np.mean(data)
+
+    all_p = Parallel(n_jobs=n_jobs)(delayed(_permute_sign)(data)
+                     for i in range(n_permute))
+    if stats['mean'] >= 0:
+        stats['p'] = np.mean(all_p >= stats['mean'])
+    else:
+        stats['p'] = np.mean(all_p <= stats['mean'])
+    return stats
+
+def two_sample_permutation(data1, data2, n_permute=5000, n_jobs=-1):
+    ''' Independent sample permutation test.
+
+        Args:
+            data1: Pandas DataFrame or Series or numpy array
+            data2: Pandas DataFrame or Series or numpy array
+            n_permute: (int) number of permutations
+            n_jobs: (int) The number of CPUs to use to do the computation.
+                    -1 means all CPUs.
+        Returns:
+            stats: (dict) dictionary of permutation results ['mean','p']
+
+    '''
+
+    stats = dict()
+    stats['mean'] = np.mean(data1)-np.mean(data2)
+    data = pd.DataFrame(data={'Values':data1,'Group':np.ones(len(data1))})
+    data = data.append(pd.DataFrame(data={
+                                        'Values':data2,
+                                        'Group':np.zeros(len(data2))}))
+    all_p = Parallel(n_jobs=n_jobs)(delayed(_permute_group)(data)
+                     for i in range(n_permute))
+
+    if stats['mean']>=0:
+        stats['p'] = np.mean(all_p>=stats['mean'])
+    else:
+        stats['p'] = np.mean(all_p<=stats['mean'])
+    return stats
+
+def correlation_permutation(data1, data2, n_permute=5000, metric='spearman',
+                            n_jobs=-1):
+    ''' Permute correlation.
+
+        Args:
+            data1: Pandas DataFrame or Series or numpy array
+            data2: Pandas DataFrame or Series or numpy array
+            n_permute: (int) number of permutations
+            metric: (str) type of association metric ['spearman','pearson',
+                    'kendall']
+            n_jobs: (int) The number of CPUs to use to do the computation.
+                    -1 means all CPUs.
+
+        Returns:
+            stats: (dict) dictionary of permutation results ['correlation','p']
+
+    '''
+
+    stats = dict()
+    data1 = np.array(data1)
+    data2 = np.array(data2)
+
+    if metric is 'spearman':
+        stats['correlation'] = spearmanr(data1, data2)[0]
+    elif metric is 'pearson':
+        stats['correlation'] = pearsonr(data1, data2)[0]
+    elif metric is 'kendall':
+        stats['correlation'] = kendalltau(data1, data2)[0]
+    else:
+        raise ValueError('metric must be "spearman" or "pearson" or "kendall"')
+
+    if metric is 'spearman':
+        all_p = Parallel(n_jobs=n_jobs)(delayed(spearmanr)(
+                        np.random.permutation(data1), data2)
+                        for i in range(n_permute))
+    elif metric is 'pearson':
+        all_p = Parallel(n_jobs=n_jobs)(delayed(pearsonr)(
+                        np.random.permutation(data1), data2)
+                        for i in range(n_permute))
+    elif metric is 'kendall':
+        all_p = Parallel(n_jobs=n_jobs)(delayed(kendalltau)(
+                        np.random.permutation(data1), data2)
+                        for i in range(n_permute))
+    all_p = [x[0] for x in all_p]
+
+    if stats['correlation'] >= 0:
+        stats['p'] = np.mean(all_p >= stats['correlation'])
+    else:
+        stats['p'] = np.mean(all_p <= stats['correlation'])
+    return stats
+
+def transform_pairwise(X, y):
+    '''Transforms data into pairs with balanced labels for ranking
+    Transforms a n-class ranking problem into a two-class classification
+    problem. Subclasses implementing particular strategies for choosing
+    pairs should override this method.
+    In this method, all pairs are choosen, except for those that have the
+    same target value. The output is an array of balanced classes, i.e.
+    there are the same number of -1 as +1
+
+    Reference: "Large Margin Rank Boundaries for Ordinal Regression",
+    R. Herbrich, T. Graepel, K. Obermayer.
+    Authors: Fabian Pedregosa <fabian@fseoane.net>
+             Alexandre Gramfort <alexandre.gramfort@inria.fr>
+    Args:
+        X : array, shape (n_samples, n_features)
+            The data
+        y : array, shape (n_samples,) or (n_samples, 2)
+            Target labels. If it's a 2D array, the second column represents
+            the grouping of samples, i.e., samples with different groups will
+            not be considered.
+
+    Returns:
+        X_trans : array, shape (k, n_feaures)
+            Data as pairs
+        y_trans : array, shape (k,)
+            Output class labels, where classes have values {-1, +1}
+
+    '''
+
+    X_new = []
+    y_new = []
+    y = np.asarray(y).flatten()
+    if y.ndim == 1:
+        y = np.c_[y, np.ones(y.shape[0])]
+    comb = itertools.combinations(range(X.shape[0]), 2)
+    for k, (i, j) in enumerate(comb):
+        if y[i, 0] == y[j, 0] or y[i, 1] != y[j, 1]:
+            # skip if same target or different group
+            continue
+        X_new.append(X[i] - X[j])
+        y_new.append(np.sign(y[i, 0] - y[j, 0]))
+        # output balanced classes
+        if y_new[-1] != (-1) ** k:
+            y_new[-1] = - y_new[-1]
+            X_new[-1] = - X_new[-1]
+    return np.asarray(X_new), np.asarray(y_new).ravel()
+
+def summarize_bootstrap(data, save_weights=False):
+    """ Calculate summary of bootstrap samples
+
+    Args:
+        sample: Brain_Data instance of samples
+        save_weights: (bool) save bootstrap weights
+
+    Returns:
+        output: dictionary of Brain_Data summary images
+
+    """
+
+    # Calculate SE of bootstraps
+    wstd = data.std()
+    wmean = data.mean()
+    wz = deepcopy(wmean)
+    a = wmean.data / wstd.data
+    wp = deepcopy(wmean)
+    wp.data = 2*(1-norm.cdf(np.abs(wz.data)))
+    # Create outputs
+    output = {'Z':wz, 'p': wp, 'mean':wmean}
+    if save_weights:
+        output['samples'] = data
+    return output
