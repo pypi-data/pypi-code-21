@@ -1,0 +1,261 @@
+# -*- coding: utf-8 -*-
+"""
+General stream reduction
+------------------------
+"""
+import numpy as np
+from functools import partial, wraps, lru_cache
+from itertools import chain
+from . import peek, array_stream, last, chunked, primed, nan_to_num
+
+@lru_cache(maxsize = 128)
+def _check_binary_ufunc(ufunc):
+    """ Check that ufunc is suitable for ``ireduce_ufunc`` """
+    if not isinstance(ufunc, np.ufunc):
+        raise TypeError('{} is not a NumPy Ufunc'.format(ufunc.__name__))
+    if not ufunc.nin == 2:
+        raise ValueError('Only binary ufuncs are supported, and {} is \
+                          not one of them'.format(ufunc.__name__))
+    
+    # Ufuncs that always return bool are problematic because they can be reduced
+    # but not be accumulated.
+    # Recall: numpy.dtype('?') == np.bool
+    if all(type_signature[-1] == '?' for type_signature in ufunc.types):
+        raise ValueError('Only binary ufuncs that preserve type are supported, \
+                          and {} is not one of them'.format(ufunc.__name__))
+
+@primed
+@array_stream
+def ireduce_ufunc(arrays, ufunc, axis = -1, dtype = None, ignore_nan = False, **kwargs):
+    """
+    Streaming reduction generator function from a binary NumPy ufunc. Generator
+    version of `reduce_ufunc`.
+
+    ``ufunc`` must be a NumPy binary Ufunc (i.e. it takes two arguments). Moreover,
+    for performance reasons, ufunc must have the same return types as input types.
+    This precludes the use of ``numpy.greater``, for example.
+
+    Note that performance is much better for the default ``axis = -1``. In such a case,
+    reduction operations can occur in-place. This also allows to operate in constant-memory.
+    
+    Parameters
+    ----------
+    arrays : iterable
+        Arrays to be reduced.
+    ufunc : numpy.ufunc
+        Binary universal function.
+    axis : int or None, optional
+        Reduction axis. Default is to reduce the arrays in the stream as if 
+        they had been stacked along a new axis, then reduce along this new axis.
+        If None, arrays are flattened before reduction. If `axis` is an int larger that
+        the number of dimensions in the arrays of the stream, arrays are reduced
+        along the new axis. Note that not all of NumPy Ufuncs support 
+        ``axis = None``, e.g. ``numpy.subtract``.
+    dtype : numpy.dtype or None, optional
+        Overrides the dtype of the calculation and output arrays.
+    ignore_nan : bool, optional
+        If True and ufunc has an identity value (e.g. ``numpy.add.identity`` is 0), then NaNs
+        are replaced with this identity. An error is raised if ``ufunc`` has no identity (e.g. ``numpy.maximum.identity`` is ``None``).
+    kwargs
+        Keyword arguments are passed to ``ufunc``. Note that some valid ufunc keyword arguments
+        (e.g. ``keepdims``) are not valid for all streaming functions. Note that
+        contrary to NumPy v. 1.10+, ``casting = 'unsafe`` is the default in npstreams.
+    
+    Yields 
+    ------
+    reduced : ndarray or scalar
+
+    Raises
+    ------
+    TypeError : if ``ufunc`` is not NumPy ufunc.
+    ValueError : if ``ignore_nan`` is True but ``ufunc`` has no identity
+    ValueError: if ``ufunc`` is not a binary ufunc
+    ValueError: if ``ufunc`` does not have the same input type as output type
+    """
+    kwargs.update({'dtype': dtype, 'axis': axis})
+
+    _check_binary_ufunc(ufunc)
+
+    if ignore_nan and (ufunc.identity is None):
+        raise ValueError('Cannot ignore NaNs because {} has no identity value'.format(ufunc.__name__))
+    
+    if ignore_nan:
+        arrays = map(partial(nan_to_num, fill_value = ufunc.identity), arrays)
+
+    # Since ireduce_ufunc is primed, we need to wait here
+    yield
+
+    if kwargs['axis'] is None:
+        yield from _ireduce_ufunc_all_axes(arrays, ufunc, **kwargs)
+        return
+
+    if kwargs['axis'] == -1:
+        yield from _ireduce_ufunc_new_axis(arrays, ufunc, **kwargs)
+        return
+
+    first, arrays = peek(arrays)
+    
+    if kwargs['axis'] >= first.ndim:
+        kwargs['axis'] = -1
+        yield from ireduce_ufunc(arrays, ufunc, **kwargs)
+        return
+
+    yield from _ireduce_ufunc_existing_axis(arrays, ufunc, **kwargs)
+
+def reduce_ufunc(*args, **kwargs):
+    """
+    Streaming reduction generator function from a binary NumPy ufunc. Essentially the
+    function equivalent to `ireduce_ufunc`.
+
+    ``ufunc`` must be a NumPy binary Ufunc (i.e. it takes two arguments). Moreover,
+    for performance reasons, ufunc must have the same return types as input types.
+    This precludes the use of ``numpy.greater``, for example.
+
+    Note that performance is much better for the default ``axis = -1``. In such a case,
+    reduction operations can occur in-place. This also allows to operate in constant-memory.
+    
+    Parameters
+    ----------
+    arrays : iterable
+        Arrays to be reduced.
+    ufunc : numpy.ufunc
+        Binary universal function.
+    axis : int or None, optional
+        Reduction axis. Default is to reduce the arrays in the stream as if 
+        they had been stacked along a new axis, then reduce along this new axis.
+        If None, arrays are flattened before reduction. If `axis` is an int larger that
+        the number of dimensions in the arrays of the stream, arrays are reduced
+        along the new axis. Note that not all of NumPy Ufuncs support 
+        ``axis = None``, e.g. ``numpy.subtract``.
+    dtype : numpy.dtype or None, optional
+        Overrides the dtype of the calculation and output arrays.
+    ignore_nan : bool, optional
+        If True and ufunc has an identity value (e.g. ``numpy.add.identity`` is 0), then NaNs
+        are replaced with this identity. An error is raised if ``ufunc`` has no identity (e.g. ``numpy.maximum.identity`` is ``None``).
+    kwargs
+        Keyword arguments are passed to ``ufunc``. Note that some valid ufunc keyword arguments
+        (e.g. ``keepdims``) are not valid for all streaming functions. Note that
+        contrary to NumPy v. 1.10+, ``casting = 'unsafe`` is the default in npstreams.
+    
+    Yields 
+    ------
+    reduced : ndarray or scalar
+
+    Raises
+    ------
+    TypeError : if ``ufunc`` is not NumPy ufunc.
+    ValueError : if ``ignore_nan`` is True but ``ufunc`` has no identity
+    ValueError: if ``ufunc`` is not a binary ufunc
+    ValueError: if ``ufunc`` does not have the same input type as output type
+    """ 
+    return last(ireduce_ufunc(*args, **kwargs))   
+
+def _ireduce_ufunc_new_axis(arrays, ufunc, **kwargs):
+    """
+    Reduction operation for arrays, in the direction of a new axis (i.e. stacking).
+    
+    Parameters
+    ----------
+    arrays : iterable
+        Arrays to be reduced.
+    ufunc : numpy.ufunc
+        Binary universal function. Must have a signature of the form ufunc(x1, x2, ...)
+    kwargs
+        Keyword arguments are passed to ``ufunc``
+    
+    Yields 
+    ------
+    reduced : ndarray
+    """
+    arrays = iter(arrays)
+    first = next(arrays)
+
+    kwargs.pop('axis')
+                
+    dtype = kwargs.get('dtype', None)
+    if dtype is None:
+        dtype = first.dtype
+    else:
+        kwargs['casting'] = 'unsafe'
+
+    accumulator = np.array(first, copy = True).astype(dtype)
+    yield accumulator
+    
+    for array in arrays:
+        ufunc(accumulator, array, out = accumulator, **kwargs)
+        yield accumulator
+
+def _ireduce_ufunc_existing_axis(arrays, ufunc, **kwargs):
+    """
+    Reduction operation for arrays, in the direction of an existing axis.
+    
+    Parameters
+    ----------
+    arrays : iterable
+        Arrays to be reduced.
+    ufunc : numpy.ufunc
+        Binary universal function. Must have a signature of the form ufunc(x1, x2, ...)
+    kwargs
+        Keyword arguments are passed to ``ufunc``
+
+    Yields 
+    ------
+    reduced : ndarray
+    """
+    arrays = iter(arrays)
+    first = next(arrays)
+
+    if kwargs['axis'] not in range(first.ndim):
+        raise ValueError('Axis {} not supported on arrays of shape {}.'.format(kwargs['axis'], first.shape))
+    
+    dtype = kwargs.get('dtype')
+    if dtype is None:
+        dtype = first.dtype
+    
+    axis_reduce = partial(ufunc.reduce, **kwargs)
+
+    accumulator = np.atleast_1d(axis_reduce(first))
+    yield accumulator
+
+    # On the first pass of the following loop, accumulator is missing a dimensions
+    # therefore, the stacking function cannot be 'concatenate'
+    second = next(arrays)
+    accumulator = np.stack([accumulator, np.atleast_1d(axis_reduce(second))], axis = -1)
+    yield accumulator
+
+    # On the second pass, the new dimensions exists, and thus we switch to
+    # using concatenate.
+    for array in arrays:
+        reduced = np.expand_dims(np.atleast_1d(axis_reduce(array)), axis = accumulator.ndim - 1)
+        accumulator = np.concatenate([accumulator, reduced], axis = accumulator.ndim - 1)
+        yield accumulator
+    
+def _ireduce_ufunc_all_axes(arrays, ufunc, **kwargs):
+    """
+    Reduction operation for arrays, over all axes.
+    
+    Parameters
+    ----------
+    arrays : iterable
+        Arrays to be reduced.
+    ufunc : numpy.ufunc
+        Binary universal function. Must have a signature of the form ufunc(x1, x2, ...)
+    kwargs
+        Keyword arguments are passed to ``ufunc``
+
+    Yields 
+    ------
+    reduced : scalar
+    """
+    arrays = iter(arrays)
+    first = next(arrays)
+
+    kwargs['axis'] = None
+    axis_reduce = partial(ufunc.reduce, **kwargs)
+
+    accumulator = axis_reduce(first)
+    yield accumulator
+    
+    for array in arrays:
+        accumulator = axis_reduce([accumulator, axis_reduce(array)])
+        yield accumulator
