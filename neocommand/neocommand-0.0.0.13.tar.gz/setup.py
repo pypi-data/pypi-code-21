@@ -1,0 +1,30 @@
+from distutils.core import setup
+
+
+setup( name = "neocommand",
+       url = "https://bitbucket.org/mjr129/neocommand",
+       version = "0.0.0.13",
+       description = "intermake extension for creating Neo4j driven applications.",
+       author = "Martin Rusilowicz",
+       license = "GNU AGPLv3",
+       packages = ["neocommand",
+                   "neocommand.data",
+                   "neocommand.database",
+                   "neocommand.extensions",
+                   "neocommand.extensions.hosts",
+                   "neocommand.extensions.plugin_classes",
+                   "neocommand.extensions.plugins.basic",
+                   "neocommand.extensions.plugins.exportation",
+                   "neocommand.gui_qt",
+                   "neocommand.helpers" ],
+       entry_points = { "console_scripts": ["neocommand = neocommand.__main__:main"] },
+       install_requires = ["PyQt5",
+                           "typing",
+                           "keyring",
+                           "colorama",
+                           "py-flags",
+                           "mhelper",
+                           "progressivecsv",
+                           "neo4j-driver",
+                           "py2neo"]
+       )
