@@ -1,0 +1,2 @@
+""" See ../docs/syndication.txt
+"""
