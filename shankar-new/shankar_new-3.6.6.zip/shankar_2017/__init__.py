@@ -1,0 +1,6 @@
+from shankar_2017.add import sradd # this function adds 2 numbers,format- shankar_2017.sradd(a,b)
+from shankar_2017.subtract import srsub # this function subtracts2 numbers,format- shankar_2017.srsub(a,b)
+from shankar_2017.multiply import srmul # this function multiplies 2 numbers,format- shankar_2017.srmul(a,b)
+from shankar_2017.division import srdiv # this function divides 2 numbers,format- shankar_2017.srdiv(a,b)
+from shankar_2017.square import srsq # this function gives square of number,format- shankar_2017.srsq(a)
+from shankar_2017.thriplesum import srthreesum # this function adds 3 numbers,format- shankar_2017.srthreesum(a,b,c)
