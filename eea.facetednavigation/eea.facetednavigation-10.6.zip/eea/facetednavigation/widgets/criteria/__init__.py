@@ -1,0 +1,2 @@
+""" Selected filters widget
+"""
