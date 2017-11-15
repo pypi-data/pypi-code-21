@@ -1,0 +1,31 @@
+
+from setuptools import setup, find_packages
+
+from misc import __version__
+
+
+with open('requirements.txt') as f:
+    install_requires = f.read().splitlines()
+
+with open('dependencies.txt') as f:
+    dependency_links = f.read().splitlines()
+
+
+url = 'https://github.com/pmaigutyak/mp-misc'
+
+
+setup(
+    name='django-mp-misc',
+    version=__version__,
+    description='Django misc apps',
+    long_description=open('README.md').read(),
+    author='Paul Maigutyak',
+    author_email='pmaigutyak@gmail.com',
+    url=url,
+    download_url='%s/archive/%s.tar.gz' % (url, __version__),
+    packages=find_packages(),
+    include_package_data=True,
+    license='MIT',
+    install_requires=install_requires,
+    dependency_links=dependency_links
+)
