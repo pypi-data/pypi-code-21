@@ -1,0 +1,2 @@
+import munger
+munger.automunge()
