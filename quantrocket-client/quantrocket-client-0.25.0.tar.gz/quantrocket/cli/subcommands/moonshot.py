@@ -1,0 +1,241 @@
+# Copyright 2017 QuantRocket - All Rights Reserved
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import argparse
+from quantrocket.cli.utils.parse import dict_str, list_or_int_or_float_or_str
+
+def add_subparser(subparsers):
+    _parser = subparsers.add_parser("moonshot", description="QuantRocket Moonshot CLI", help="quantrocket moonshot -h")
+    _subparsers = _parser.add_subparsers(title="subcommands", dest="subcommand")
+    _subparsers.required = True
+
+    examples = """
+Backtest one or more strategies.
+
+By default returns a PDF tear sheet of performance charts but can also return a CSV of
+backtest results.
+
+Examples:
+
+Backtest a single strategy called demo, using all available history:
+
+    quantrocket moonshot backtest demo -o tearsheet.pdf
+
+Backtest several HML (High Minus Low) strategies from 2005-2015 and return a
+CSV of results:
+
+    quantrocket moonshot backtest hml-us hml-eur hml-asia -s 2005-01-01 -e 2015-12-31 --csv -o hml_results.csv
+    """
+    parser = _subparsers.add_parser(
+        "backtest",
+        help="backtest one or more strategies",
+        epilog=examples,
+        formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument(
+        "strategies",
+        nargs="+",
+        metavar="CODE",
+        help="one or more strategy codes")
+    backtest_options = parser.add_argument_group("backtest options")
+    backtest_options.add_argument(
+        "-s", "--start-date",
+        metavar="YYYY-MM-DD",
+        help="the backtest start date (default is to use all available history)")
+    backtest_options.add_argument(
+        "-e", "--end-date",
+        metavar="YYYY-MM-DD",
+        help="the backtest end date (default is to use all available history)")
+    backtest_options.add_argument(
+        "-l", "--allocations",
+        type=dict_str,
+        metavar="CODE:FLOAT",
+        nargs="*",
+        help="the allocation for each strategy, passed as 'code:allocation' (default "
+        "allocation is 1.0 / number of strategies)")
+    backtest_options.add_argument(
+        "-n", "--nlv",
+        nargs="*",
+        type=dict_str,
+        metavar="CURRENCY:NLV",
+        help="the NLV (net liquidation value, i.e. account balance) to assume for "
+        "the backtest, expressed in each currency represented in the backtest (pass "
+        "as 'currency:nlv')")
+    backtest_options.add_argument(
+        "-p", "--params",
+        nargs="*",
+        type=dict_str,
+        metavar="PARAM:VALUE",
+        help="one or more strategy params to set on the fly before backtesting "
+        "(pass as 'param:value')")
+    outputs = parser.add_argument_group("output options")
+    outputs.add_argument(
+        "-d", "--details",
+        action="store_true",
+        help="return detailed results for all securities instead of aggregating to "
+        "strategy level (only supported for single-strategy backtests)")
+    outputs.add_argument(
+        "--csv",
+        action="store_true",
+        help="return a CSV of performance data (default is to return a PDF "
+        "performance tear sheet)")
+    outputs.add_argument(
+        "-o", "--outfile",
+        metavar="FILEPATH",
+        dest="filepath_or_buffer",
+        help="the location to write the results file (omit to write to stdout)")
+    parser.set_defaults(func="quantrocket.moonshot._cli_backtest")
+
+    examples="""
+Run a parameter scan for one or more strategies.
+
+By default returns a PDF tear sheet of results but can also return a CSV.
+
+Examples:
+
+Run a parameter scan for several different moving averages on a strategy
+called trend-friend:
+
+    quantrocket moonshot paramscan trend-friend -p MAVG_WINDOW -v 20 50 100 -o tearsheet.pdf
+
+Run a 2-D parameter scan for multiple strategies:
+
+    quantrocket moonshot paramscan strat1 strat2 strat3 -p MIN_STD -v 1 1.5 2 --param2 STD_WINDOW --vals2 20 50 100 200 -o tearsheet.pdf
+    """
+    parser = _subparsers.add_parser(
+        "paramscan",
+        help="run a parameter scan for one or more strategies",
+        epilog=examples,
+        formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument(
+        "strategies",
+        nargs="+",
+        metavar="CODE",
+        help="one or more strategy codes")
+    backtest_options = parser.add_argument_group("backtest options")
+    backtest_options.add_argument(
+        "-s", "--start-date",
+        metavar="YYYY-MM-DD",
+        help="the backtest start date (default is to use all available history)")
+    backtest_options.add_argument(
+        "-e", "--end-date",
+        metavar="YYYY-MM-DD",
+        help="the backtest end date (default is to use all available history)")
+    backtest_options.add_argument(
+        "-p", "--param1",
+        metavar="PARAM",
+        type=str,
+        required=True,
+        help="the name of the parameter to test (a class attribute on the strategy)")
+    backtest_options.add_argument(
+        "-v", "--vals1",
+        type=list_or_int_or_float_or_str,
+        metavar="VALUE",
+        nargs="+",
+        required=True,
+        help="parameter values to test (values can be integers, floats, strings, 'True', "
+        "'False', 'None', or 'default' (to test current param value); for lists/tuples, "
+        "use comma-separated values)")
+    backtest_options.add_argument(
+        "--param2",
+        metavar="PARAM",
+        type=str,
+        help="name of a second parameter to test (for 2-D parameter scans)")
+    backtest_options.add_argument(
+        "--vals2",
+        type=list_or_int_or_float_or_str,
+        metavar="VALUE",
+        nargs="*",
+        help="values to test for parameter 2 (values can be integers, floats, strings, "
+        "'True', 'False', 'None', or 'default' (to test current param value); for "
+        "lists/tuples, use comma-separated values)")
+    backtest_options.add_argument(
+        "-l", "--allocations",
+        type=dict_str,
+        metavar="CODE:FLOAT",
+        nargs="*",
+        help="the allocation for each strategy, passed as 'code:allocation' (default "
+        "allocation is 1.0 / number of strategies)")
+    backtest_options.add_argument(
+        "-n", "--nlv",
+        nargs="*",
+        type=dict_str,
+        metavar="CURRENCY:NLV",
+        help="the NLV (net liquidation value, i.e. account balance) to assume for "
+        "the backtests, expressed in each currency represented in the backtest (pass "
+        "as 'currency:nlv')")
+    backtest_options.add_argument(
+        "--params",
+        nargs="*",
+        type=dict_str,
+        metavar="PARAM:VALUE",
+        help="one or more strategy params to set on the fly before backtesting "
+        "(pass as 'param:value')")
+    outputs = parser.add_argument_group("output options")
+    outputs.add_argument(
+        "--csv",
+        action="store_true",
+        help="return a CSV of results data (default is to return a PDF "
+        "tear sheet)")
+    outputs.add_argument(
+        "-o", "--outfile",
+        metavar="FILEPATH",
+        dest="filepath_or_buffer",
+        help="the location to write the results file (omit to write to stdout)")
+    parser.set_defaults(func="quantrocket.moonshot._cli_scan_parameters")
+
+    #parser = _subparsers.add_parser("walkforward", help="run walkforward analysis for one or more strategies")
+    #parser.add_argument("start_date", metavar="YYYY-MM-DD", help="start date")
+    #parser.add_argument("end_date", metavar="YYYY-MM-DD", help="end date")
+    #parser.add_argument("-s", "--strategies", nargs="+", metavar="CODE", help="one or more strategies to backtest")
+    #parser.add_argument("-l", "--allocations", type=float, metavar="FLOAT", nargs="*", help="the allocations for each strategy, if different from the registered allocation (must be the same length as -s/--strategies if provided)")
+    #parser.add_argument("-i", "--interval", metavar="OFFSET", required=True, help="walkforward intervals as a Pandas offset string (e.g. MS, QS, 6MS, AS, see http://pandas.pydata.org/pandas-docs/stable/timeseries.html#offset-aliases)")
+    #parser.add_argument("-p", "--param1", metavar="PARAM", type=str, required=True, help="name of the parameter to test")
+    #parser.add_argument("-v", "--vals1", metavar="VALUE", nargs="+", help="parameter values to test")
+    #parser.add_argument("-f", "--func1", metavar="PATH", help="dot-separated path of a function with which to transform the test values")
+    #parser.add_argument("--rolling", action="store_true", help="use a rolling window to calculate performance (default is to use an expanding window)")
+    #parser.add_argument("-r", "--rankby", choices=["cagr", "sharpe"], help="rank each period's performance by 'sharpe', 'cagr', or a 'blend' of both (default blend)")
+    #parser.add_argument("-a", "--account", help="use the latest NLV of this account for modeling commissions, liquidity constraints, etc.")
+    #parser.add_argument("--params", nargs="*", metavar="PARAM:VALUE", help="strategy params to set on the fly (distinct from the params to be scanned)")
+    #parser.add_argument("-w", "--raw", action="store_true", help="return raw performance data instead of a performance tearsheet")
+    #parser.set_defaults(func="quantrocket.moonshot.walkforward")
+
+    #parser = _subparsers.add_parser("params", help="view params for one or more strategies")
+    #parser.add_argument("codes", nargs="+", metavar="CODE", help="the strategies to include")
+    #parser.add_argument("-d", "--diff", action="store_true", help="exclude params that are the same for all strategies")
+    #parser.add_argument("-p", "--params", metavar="PARAM", nargs="*", help="limit to these params")
+    #parser.add_argument("-g", "--group-by-class", choices=["parent", "child"], help="""
+    #group by the topmost ("parent") or bottommost ("child") class in the strategy class hierarchy
+    #where the param is defined (default no class grouping). (Use "parent" to group by category
+    #and "child" to show where param would need to be edited.)""")
+    #parser.add_argument("-s", "--groupsort", action="store_true", help="sort by origin class (requires -g/--group-by-class), otherwise sort by param name")
+    #parser.set_defaults(func="quantrocket.moonshot.get_params")
+
+    #parser = _subparsers.add_parser("trade", help="run one or more strategies and generate orders")
+    #parser.add_argument("strategies", nargs="*", metavar="CODE", help="one or more strategies to trade")
+    #parser.add_argument("-q", "--quotes", action="store_true", help="get realtime quotes asap and append to price history")
+    #parser.add_argument("-t", "--quotes-at", metavar="HH:MM:SS TZ", help="get realtime quotes at the specified time and append to price history")
+    #parser.add_argument("-f", "--quotes-func", metavar="PATH", help="dot-separated path of a function through which the quotes should be passed before appending them to price history")
+    #parser.add_argument("-s", "--save-quotes", metavar="DB", help="instruct the realtime service to save the realtime quotes to this price history database")
+    #parser.add_argument("-r", "--review-date", metavar="YYYY-MM-DD", help="generate trades as if it were this date")
+    #parser.set_defaults(func="quantrocket.moonshot.trade")
+
+    #parser = _subparsers.add_parser("shortfall", help="compare live and simulated results")
+    #parser.add_argument("start_date", metavar="YYYY-MM-DD", help="start date")
+    #parser.add_argument("end_date", nargs="?", metavar="YYYY-MM-DD", help="end date (optional)")
+    #parser.add_argument("-s", "--strategies", nargs="+", metavar="CODE", help="one or more strategies to show shortfall for")
+    #parser.add_argument("-l", "--allocations", type=float, metavar="FLOAT", nargs="*", help="the allocations for each strategy, if different from the registered allocation (must be the same length as -s/--strategies if provided)")
+    #parser.add_argument("-a", "--account", help="the account to compare shortfall for (if not provided, the default account registered with the account service will be used)")
+    #parser.add_argument("-p", "--params", nargs="*", metavar="PARAM:VALUE", help="strategy params to set on the fly")
+    #parser.add_argument("-w", "--raw", action="store_true", help="return raw performance data instead of a performance tearsheet")
+    #parser.set_defaults(func="quantrocket.moonshot.get_implementation_shortfall")
