@@ -1,0 +1,68 @@
+import os
+import unittest
+import numpy as np
+from atomap.atom_lattice import Atom_Lattice
+from atomap.sublattice import Sublattice
+from atomap.testing_tools import MakeTestData
+from atomap.initial_position_finding import (
+        find_dumbbell_vector, make_atom_lattice_dumbbell_structure)
+from atomap.atom_finding_refining import get_atom_positions
+import atomap.testing_tools as tt
+
+my_path = os.path.dirname(__file__)
+
+
+class test_create_atom_lattice_object(unittest.TestCase):
+
+    def setUp(self):
+        atoms_N = 10
+        image_data = np.arange(10000).reshape(100, 100)
+        peaks = np.arange(20).reshape(atoms_N, 2)
+        self.sublattice = Sublattice(
+                peaks,
+                image_data)
+
+    def test_create_empty_atom_lattice_object(self):
+        Atom_Lattice()
+
+    def test_create_atom_lattice_object(self):
+        atom_lattice = Atom_Lattice()
+        atom_lattice.sublattice_list.append(self.sublattice)
+
+    def test_get_sublattice_atom_list_on_image(self):
+        atom_lattice = Atom_Lattice()
+        atom_lattice.image0 = self.sublattice.image
+        atom_lattice.sublattice_list.append(self.sublattice)
+        atom_lattice.get_sublattice_atom_list_on_image()
+
+
+class test_dumbbell_lattice(unittest.TestCase):
+
+    def setUp(self):
+        test_data = MakeTestData(200, 200)
+        x0, y0 = np.mgrid[10:200:20, 10:200:20]
+        x1, y1 = np.mgrid[16:200:20, 10:200:20]
+        x, y = np.vstack((x0, x1)).flatten(), np.vstack((y0, y1)).flatten()
+        test_data.add_atom_list(x, y, sigma_x=1, sigma_y=1, amplitude=50)
+        self.signal = test_data.signal
+
+    def test_refine_position_gaussian(self):
+        signal = self.signal
+        vector = find_dumbbell_vector(signal, 4)
+        position_list = get_atom_positions(signal, separation=13)
+        atom_lattice = make_atom_lattice_dumbbell_structure(
+                signal, position_list, vector)
+        atom_lattice.refine_position_gaussian()
+
+
+class test_atom_lattice_plot(unittest.TestCase):
+
+    def setUp(self):
+        test_data = tt.MakeTestData(50, 50)
+        test_data.add_atom_list(np.arange(5, 45, 5), np.arange(5, 45, 5))
+        self.atom_lattice = test_data.atom_lattice
+
+    def test_plot(self):
+        self.atom_lattice.plot()
+        self.atom_lattice.plot(markersize=10, cmap='viridis')
+        self.atom_lattice.plot(image=np.ones_like(self.atom_lattice.image0))
