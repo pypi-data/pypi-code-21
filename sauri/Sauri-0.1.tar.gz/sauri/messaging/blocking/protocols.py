@@ -1,0 +1,2 @@
+class Protocol:
+    AMQP = 'amqp'
