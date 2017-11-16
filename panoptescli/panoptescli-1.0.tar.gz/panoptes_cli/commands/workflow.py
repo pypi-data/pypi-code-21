@@ -1,0 +1,170 @@
+import click
+
+from panoptes_cli.scripts.panoptes import cli
+from panoptes_client import Workflow
+
+
+@cli.group()
+def workflow():
+    """Contains commands for managing workflows."""
+    pass
+
+
+@workflow.command()
+@click.argument('workflow-id', required=False, type=int)
+@click.option(
+    '--project-id',
+    '-p',
+    help="List workflows linked to the given project.",
+    required=False,
+    type=int,
+)
+@click.option(
+    '--quiet',
+    '-q',
+    is_flag=True,
+    help='Only print workflow IDs (omit names).',
+)
+def ls(workflow_id, project_id, quiet):
+    """Lists workflow IDs and names."""
+
+    if workflow_id and not project_id:
+        workflow = Workflow.find(workflow_id)
+        if quiet:
+            click.echo(workflow.id)
+        else:
+            echo_workflow(workflow)
+        return
+
+    args = {}
+    if project_id:
+        args['project_id'] = project_id
+    if workflow_id:
+        args['workflow_id'] = workflow_id
+
+    workflows = Workflow.where(**args)
+    if quiet:
+        click.echo(" ".join([w.id for w in workflows]))
+    else:
+        for workflow in workflows:
+            echo_workflow(workflow)
+
+
+@workflow.command(name='retire-subjects')
+@click.argument('workflow-id', type=int)
+@click.argument('subject-ids', type=int, nargs=-1)
+@click.option(
+    '--reason',
+    '-r',
+    help="The reason for retiring the subject.",
+    type=click.Choice((
+        'classification_count',
+        'flagged',
+        'blank',
+        'consensus',
+        'other'
+    )),
+    default='other'
+)
+def retire_subjects(workflow_id, subject_ids, reason):
+    """
+    Retires subjects from the given workflow.
+
+    The subjects will no longer be served to volunteers for classification.
+    """
+
+    workflow = Workflow.find(workflow_id)
+    workflow.retire_subjects(subject_ids, reason)
+
+
+@workflow.command(name='add-subject-sets')
+@click.argument('workflow-id', type=int)
+@click.argument('subject-set-ids', type=int, nargs=-1)
+def add_subject_sets(workflow_id, subject_set_ids):
+    """Links existing subject sets to the given workflow."""
+
+    workflow = Workflow.find(workflow_id)
+    workflow.add_subject_sets(subject_set_ids)
+
+
+@workflow.command(name='remove-subject-sets')
+@click.argument('workflow-id', type=int)
+@click.argument('subject-set-ids', type=int, nargs=-1)
+def remove_subject_sets(workflow_id, subject_set_ids):
+    """Unlinks the given subject sets from the given workflow."""
+
+    workflow = Workflow.find(workflow_id)
+    workflow.remove_subject_sets(subject_set_ids)
+
+
+@workflow.command()
+@click.argument('workflow-id', type=int)
+def activate(workflow_id):
+    """Activates the given workflow."""
+
+    workflow = Workflow.find(workflow_id)
+    workflow.active = True
+    workflow.save()
+
+
+@workflow.command()
+@click.argument('workflow-id', type=int)
+def deactivate(workflow_id):
+    """Deactivates the given workflow."""
+
+    workflow = Workflow.find(workflow_id)
+    workflow.active = False
+    workflow.save()
+
+
+@workflow.command(name="download-classifications")
+@click.argument('workflow-id', required=True, type=int)
+@click.argument('output-file', required=True, type=click.File('wb'))
+@click.option('--generate', '-g', is_flag=True)
+@click.option(
+    '--generate-timeout',
+    '-T',
+    required=False,
+    type=int,
+)
+def download_classifications(
+    workflow_id,
+    output_file,
+    generate,
+    generate_timeout
+):
+    """
+    Downloads a workflow-specific classifications export for the given workflow.
+
+    OUTPUT_FILE will be overwritten if it already exists. Set OUTPUT_FILE to -
+    to output to stdout.
+    """
+
+    workflow = Workflow.find(workflow_id)
+
+    if generate:
+        click.echo("Generating new export...", err=True)
+
+    export = workflow.get_export(
+        'classifications',
+        generate=generate,
+        wait_timeout=generate_timeout
+    )
+
+    with click.progressbar(
+        export.iter_content(chunk_size=1024),
+        label='Downloading',
+        length=(int(export.headers.get('content-length')) / 1024 + 1),
+        file=click.get_text_stream('stderr'),
+    ) as chunks:
+        for chunk in chunks:
+            output_file.write(chunk)
+
+
+def echo_workflow(workflow):
+    click.echo(
+        u'{} {}'.format(
+            workflow.id,
+            workflow.display_name
+        )
+    )
