@@ -1,0 +1,73 @@
+import requests
+from pact_test.either import *
+from pact_test.constants import *
+from pact_test.utils.logger import *
+from pact_test.models.response import PactResponse
+
+
+def execute_interaction_request(url, port, interaction):
+    debug('=== INTERACTION REQUEST ===')
+    url = _build_url(url, port, interaction)
+    debug(url)
+    method = interaction[REQUEST].get('method', 'GET')
+    debug(method)
+    server_response = _server_response(method, url=url)
+    debug(server_response.value)
+
+    if type(server_response) is Right:
+        debug('=== RIGHT RESPONSE ===')
+        headers = _parse_headers(server_response.value)
+        debug(headers)
+        content_type = _get_content_type(headers)
+        debug(content_type)
+        out = Right(PactResponse(
+            status=server_response.value.status_code,
+            headers=headers,
+            body=_parse_body(server_response.value, content_type)
+        ))
+        debug('=== RIGHT RESPONSE ===')
+        return out
+
+    debug('=== INTERACTION REQUEST ===')
+    return server_response
+
+
+def _server_response(method, url):
+    try:
+        return Right(requests.request(method, url=url))
+    except Exception as e:
+        return Left(str(e))
+
+
+def _parse_body(server_response, content_type):
+    debug(type(server_response))
+    debug(server_response)
+    debug(content_type)
+    if JSON in content_type:
+        return server_response.json()
+    else:
+        return server_response.text()
+
+
+def _parse_headers(server_response):
+    headers = []
+    server_headers = server_response.headers or []
+    for key in server_headers:
+        headers.append((key, server_headers[key]))
+    return headers
+
+
+def _build_url(url, port, interaction):
+    path = interaction[REQUEST].get('path', '')
+    query = interaction[REQUEST].get('query', '')
+
+    test_port = str(port) if port else str(80)
+    return 'http://' + url + ':' + test_port + path + query
+
+
+def _get_content_type(headers):
+    content_type = TEXT
+    types = list(filter(lambda h: h[0].upper() == 'CONTENT-TYPE', headers))
+    if types:
+        content_type = types[0][1]
+    return content_type
