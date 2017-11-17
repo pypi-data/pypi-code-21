@@ -1,0 +1,492 @@
+# -*- coding: utf-8 -*-
+#
+# MARV
+# Copyright (C) 2016-2017  Ternaris, Munich, Germany
+#
+# This file is part of MARV
+#
+# MARV is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as
+# published by the Free Software Foundation, either version 3 of the
+# License, or (at your option) any later version.
+#
+# MARV is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with MARV.  If not, see <http://www.gnu.org/licenses/>.
+
+from __future__ import absolute_import, division, print_function
+
+import json
+import os
+from logging import getLogger
+
+import click
+from sqlalchemy.orm.exc import NoResultFound
+
+import marv.app
+from marv.config import ConfigError
+from marv.model import Comment, Dataset, User, Group, dataset_tag, db
+from marv.model import STATUS_MISSING
+from marv.site import Site, UnknownNode
+from marv.utils import find_obj
+from marv_cli import marv as marvcli
+from marv_cli import IPDB
+from marv_node.setid import SetID
+from marv_store import DirectoryAlreadyExists
+
+
+log = getLogger(__name__)
+
+
+class NodeParamType(click.ParamType):
+    name = 'NODE'
+
+    def convert(self, value, param, ctx):
+        return find_obj(value)
+
+NODE = NodeParamType()
+
+
+def create_app(push=True):
+    ctx = click.get_current_context()
+    siteconf = ctx.obj
+    if siteconf is None:
+        ctx.fail('Could not find config file: ./marv.conf or /etc/marv/marv.conf.\n'
+                 'Change working directory or specify explicitly:\n\n'
+                 '  marv --config /path/to/marv.conf\n')
+    site = Site(siteconf)
+    try:
+        app = marv.app.create_app(site)
+    except ConfigError as e:
+        click.echo('Error {}'.format(e.args[0]), err=True)
+        click.get_current_context().exit(1)
+    if push:
+        appctx = app.app_context()
+        appctx.push()
+        ctx.call_on_close(appctx.pop)
+    return app
+
+
+def parse_setids(datasets, discarded=False):
+    fail = click.get_current_context().fail
+    setids = set()
+    for prefix in datasets:
+        many = prefix.endswith('*')
+        prefix = prefix[:-1] if many else prefix
+        setid = db.session.query(Dataset.setid)\
+                          .filter(Dataset.setid.like('{}%'.format(prefix)))\
+                          .filter(Dataset.discarded.is_(discarded))\
+                          .all()
+        if len(setid) == 0:
+            fail('{} does not match any {}dataset'
+                 .format(prefix, 'discarded ' if discarded else ''))
+        elif len(setid) > 1 and not many:
+            matches = '\n  '.join([x[0] for x in setid])
+            fail("{} matches multiple:\n  {}\nUse '{}*' to mean all these."
+                 .format(prefix, matches, prefix))
+        setids.update(x[0] for x in setid)
+        # TODO: complain about multiple
+    return sorted(setids)
+
+
+@marvcli.command('cleanup')
+@click.option('--discarded/--no-discarded', help='Delete discarded datasets')
+@click.option('--unused-tags/--no-unused-tags',
+              help='Cleanup unused tags and other relations')
+@click.pass_context
+def marvcli_cleanup(ctx, discarded, unused_tags):
+    """Cleanup unused tags and discarded datasets."""
+    if not any([discarded, unused_tags]):
+        click.echo(ctx.get_help())
+        ctx.exit(1)
+
+    site = create_app().site
+
+    if discarded:
+        site.cleanup_discarded()
+
+    if unused_tags:
+        site.cleanup_tags()
+        site.cleanup_relations()
+
+    # TODO: cleanup unused store paths / unused generations
+
+
+@marvcli.group('develop')
+def marvcli_develop():
+    """Development tools."""
+
+
+@marvcli_develop.command('server')
+@click.option('--port', default=5000, help='Port to listen on')
+@click.option('--public/--no-public',
+              help='Listen on all IPs instead of only 127.0.0.1')
+def marvcli_develop_server(port, public):
+    """Run development webserver.
+
+    ATTENTION: By default it is only served on localhost. To run it
+    within a container and access it from the outside, you need to
+    forward the port and tell it to listen on all IPs instead of only
+    localhost.
+    """
+    from flask_cors import CORS
+    app = create_app(push=False)
+    app.site.load_for_web()
+    CORS(app)
+
+    class IPDBMiddleware(object):
+        def __init__(self, app):
+            self.app = app
+
+        def __call__(self, environ, start_response):
+            from ipdb import launch_ipdb_on_exception
+            with launch_ipdb_on_exception():
+                appiter = self.app(environ, start_response)
+                for item in appiter:
+                    yield item
+
+    app.debug = True
+    if IPDB:
+        app.wsgi_app = IPDBMiddleware(app.wsgi_app)
+        app.run(use_debugger=False,
+                use_reloader=False,
+                host=('0.0.0.0' if public else '127.0.0.1'),
+                port=port,
+                threaded=False)
+    else:
+        app.run(host=('0.0.0.0' if public else '127.0.0.1'),
+                port=port,
+                reloader_type='watchdog',
+                threaded=False)
+
+
+@marvcli.command('discard')
+@click.option('--node', 'nodes', multiple=True, help='TODO: Discard output of selected nodes')
+@click.option('--all-nodes', help='TODO: Discard output of all nodes')
+@click.option('--comments/--no-comments', help='Delete comments')
+@click.option('--tags/--no-tags', help='Delete tags')
+@click.option('--confirm/--no-confirm', default=True, show_default=True,
+              help='Ask for confirmation before deleting tags and comments')
+@click.argument('datasets', nargs=-1, required=True)
+def marvcli_discard(datasets, all_nodes, nodes, tags, comments, confirm):
+    """Mark DATASETS to be discarded or discard associated data.
+
+    Without any options the specified datasets are marked to be
+    discarded via `marv cleanup --discarded`. Use `marv undiscard` to
+    undo this operation.
+
+    Otherwise, selected data associated with the specified datasets is
+    discarded right away.
+    """
+    mark_discarded = not any([all_nodes, nodes, tags, comments])
+
+    site = create_app().site
+    setids = parse_setids(datasets)
+
+    if tags or comments:
+        if confirm:
+            msg = ' and '.join(filter(None, ['tags' if tags else None,
+                                             'comments' if comments else None]))
+            click.echo('About to delete {}'.format(msg))
+            click.confirm('This cannot be undone. Do you want to continue?', abort=True)
+
+        ids = [x[0] for x in db.session.query(Dataset.id).filter(Dataset.setid.in_(setids))]
+        if tags:
+            where = dataset_tag.c.dataset_id.in_(ids)
+            stmt = dataset_tag.delete().where(where)
+            db.session.execute(stmt)
+
+        if comments:
+            comment_table = Comment.__table__
+            where = comment_table.c.dataset_id.in_(ids)
+            stmt = comment_table.delete().where(where)
+            db.session.execute(stmt)
+
+    if nodes or all_nodes:
+        storedir = site.config.marv.storedir
+        for setid in setids:
+            setdir = os.path.join(storedir, setid)
+        # TODO: see where we are getting with dep tree tables
+
+    if mark_discarded:
+        dataset = Dataset.__table__
+        stmt = dataset.update()\
+                      .where(dataset.c.setid.in_(setids))\
+                      .values(discarded=True)
+        db.session.execute(stmt)
+
+    db.session.commit()
+
+
+@marvcli.command('undiscard')
+@click.argument('datasets', nargs=-1, required=True)
+def marvcli_undiscard(datasets):
+    """Undiscard DATASETS previously discarded."""
+    create_app()
+
+    setids = parse_setids(datasets, discarded=True)
+    dataset = Dataset.__table__
+    stmt = dataset.update()\
+                  .where(dataset.c.setid.in_(setids))\
+                  .values(discarded=False)
+    db.session.execute(stmt)
+    db.session.commit()
+
+
+@marvcli.command('restore')
+@click.argument('file', type=click.File(), default='-')
+def marvcli_restore(file):
+    """Restore previously dumped database"""
+    data = json.load(file)
+    site = create_app().site
+    site.restore_database(**data)
+
+
+@marvcli.command('init')
+def marvcli_init():
+    """(Re-)initialize marv site according to config"""
+    create_app().site.init()
+
+
+@marvcli.command('query')
+@click.option('--list-tags', is_flag=True, help='List all tags')
+@click.option('--collection', 'collections', multiple=True,
+              help='Limit to one or more collections or force listing of all with --collection=*')
+@click.option('--discarded/--no-discarded', help='Dataset is discarded')
+@click.option('--outdated', is_flag=True, help='Datasets with outdated node output')
+@click.option('--path', type=click.Path(resolve_path=True),
+              help='Dataset contains files whose path starts with PATH')
+@click.option('--tagged', 'tags', multiple=True, help='Match any given tag')
+@click.option('-0', '--null', is_flag=True, help='Use null byte to separate output instead of newlines')
+@click.pass_context
+def marvcli_query(ctx, list_tags, collections, discarded, outdated, path, tags, null):
+    """Query datasets.
+
+    Use --collection=* to list all datasets across all collections.
+    """
+    if not any([collections, discarded, list_tags, outdated, path, tags]):
+        click.echo(ctx.get_help())
+        ctx.exit(1)
+
+    sep = '\x00' if null else '\n'
+
+    site = create_app().site
+
+    if '*' in collections:
+        collections = None
+    else:
+        for col in collections:
+            if col not in site.collections:
+                ctx.fail('Unknown collection: {}'.format(col))
+
+    if list_tags:
+        tags = site.listtags(collections)
+        if tags:
+            click.echo(sep.join(tags), nl=not null)
+        else:
+            click.echo('no tags', err=True)
+        return
+
+    setids = site.query(collections, discarded, outdated, path, tags)
+    if setids:
+        sep = '\x00' if null else '\n'
+        click.echo(sep.join(setids), nl=not null)
+
+
+@marvcli.command('run', short_help='Run nodes for DATASETS')
+@click.option('--node', 'selected_nodes', multiple=True,
+              help='Run individual nodes instead of all nodes used by detail and listing.'
+              ' Use --list-nodes for a list of known nodes. Beyond that any node can be run'
+              ' by referencing it with package.module:node')
+@click.option('--list-nodes', is_flag=True, help='List known nodes instead of running')
+@click.option('--deps/--no-deps', default=True, show_default=True,
+              help='Run dependencies of requested nodes')
+@click.option('--exclude', 'excluded_nodes', multiple=True,
+              help='Exclude individual nodes instead of running all nodes used by detail and listing')
+@click.option('-f', '--force/--no-force',
+              help='Force run of nodes whose output is already available from store')
+# TODO: force-deps is bad as it does not allow to resume
+# better: discard nodes selectively or discard --deps node
+# discarding does not delete, but simply registers the most recent generation to be empty
+@click.option('--force-deps/--no-force-deps',
+              help='Force run of dependencies whose output is already available from store')
+@click.option('--keep/--no-keep', help='Keep uncommitted streams for debugging')
+@click.option('--keep-going/--no-keep-going',
+              help='In case of an exception keep going with remaining datasets')
+@click.option('--detail/--no-detail', 'update_detail',
+              help='Update detail view from stored node output')
+@click.option('--listing/--no-listing', 'update_listing',
+              help='Update listing view from stored node output')
+@click.option('--cachesize', default=50, show_default=True,
+              help='Number of messages to keep in memory for each stream')
+@click.option('--collection', 'collections', multiple=True,
+              help='Run nodes for all datasets of selected collections, use "*" for all')
+@click.argument('datasets', nargs=-1)
+@click.pass_context
+def marvcli_run(ctx, datasets, deps, excluded_nodes, force, force_deps,
+             keep, keep_going, list_nodes, selected_nodes, update_detail,
+             update_listing, cachesize, collections):
+    """Run nodes for selected datasets.
+
+    Datasets are specified by a list of set ids, --all-datasets, or
+    --collection <name>.
+
+    Set ids may be abbreviated to any uniquely identifying
+    prefix. Suffix a prefix by '+' to match multiple.
+
+    """
+    if collections and datasets:
+        ctx.fail('--collection and DATASETS are mutually exclusive')
+
+    if not any([datasets, collections, list_nodes]):
+        click.echo(ctx.get_help())
+        ctx.exit(1)
+
+    deps = 'force' if force_deps else deps
+    force = force_deps or force
+
+    site = create_app().site
+
+    if '*' in collections:
+        collections = None
+    else:
+        for col in collections:
+            if col not in site.collections:
+                ctx.fail('Unknown collection: {}'.format(col))
+
+    if list_nodes:
+        for col in (collections or sorted(site.collections.keys())):
+            click.echo('{}:'.format(col))
+            for name in sorted(site.collections[col].nodes):
+                if name == 'dataset':
+                    continue
+                click.echo('    {}'.format(name))
+        return
+
+    errors = []
+
+    setids = [SetID(x) for x in parse_setids(datasets)]
+    if not setids:
+        query = db.session.query(Dataset.setid)\
+                           .filter(Dataset.discarded.isnot(True))\
+                           .filter(Dataset.status.op('&')(STATUS_MISSING) == 0)
+        if collections is not None:
+            query = query.filter(Dataset.collection.in_(collections))
+        setids = (SetID(x[0]) for x in query)
+
+    for setid in setids:
+        if IPDB:
+            site.run(setid, selected_nodes, deps, force, keep,
+                     update_detail, update_listing, excluded_nodes,
+                     cachesize=cachesize)
+        else:
+            try:
+                site.run(setid, selected_nodes, deps, force, keep,
+                         update_detail, update_listing, excluded_nodes,
+                         cachesize=cachesize)
+            except UnknownNode as e:
+                ctx.fail('Collection {} has no node {}'.format(*e.args))
+            except NoResultFound:
+                click.echo('ERROR: unknown {!r}'.format(setid), err=True)
+                if not keep_going:
+                    raise
+            except BaseException as e:
+                errors.append(setid)
+                if isinstance(e, KeyboardInterrupt):
+                    log.warn('KeyboardInterrupt: aborting')
+                    raise
+                elif isinstance(e, DirectoryAlreadyExists):
+                    click.echo("""
+ERROR: Directory for node run already exists:
+{!r}
+In case no other node run is in progress, this is a bug which you are kindly
+asked to report, providing information regarding any previous, failed node runs.
+""".format(e.args[0]), err=True)
+                    if not keep_going:
+                        ctx.abort()
+                else:
+                    log.error('Exception occured for dataset %s:', setid, exc_info=True)
+                    log.error('Error occured for dataset %s: %s', setid, e)
+                    if not keep_going:
+                        ctx.exit(1)
+    if errors:
+        log.error('There were errors for %r', errors)
+
+
+@marvcli.command('scan')
+@click.option('-n', '--dry-run', is_flag=True)
+def marvcli_scan(dry_run):
+    """Scan for new and changed files"""
+    create_app().site.scan(dry_run)
+
+
+@marvcli.command('tag')
+@click.option('--add', multiple=True, help='Tags to add')
+@click.option('--rm', '--remove', multiple=True, help='Tags to remove')
+@click.argument('datasets', nargs=-1)
+@click.pass_context
+def marvcli_tag(ctx, add, remove, datasets):
+    """Add or remove tags to datasets"""
+    if not any([add, remove]) or not datasets:
+        click.echo(ctx.get_help())
+        ctx.exit(1)
+
+    setids = parse_setids(datasets)
+    create_app().site.tag(setids, add, remove)
+
+
+@marvcli.group('user')
+def marvcli_user():
+    """Manage user accounts"""
+
+
+@marvcli_user.command('add')
+@click.option('--password', prompt=True, hide_input=True, confirmation_prompt=True,
+              help='Password will be prompted')
+@click.argument('username')
+@click.pass_context
+def marvcli_user_add(ctx, username, password):
+    """Add a user"""
+    app = create_app()
+    try:
+        app.um.user_add(username, password, 'marv', '')
+    except ValueError as e:
+        ctx.fail(e.args[0])
+
+
+@marvcli_user.command('list')
+def marvcli_user_list():
+    """List existing users"""
+    app = create_app()
+    for name in db.session.query(User.name).order_by(User.name):
+        click.echo(name[0])
+
+
+@marvcli_user.command('pw')
+@click.option('--password', prompt=True, hide_input=True, confirmation_prompt=True,
+              help='Password will be prompted')
+@click.argument('username')
+@click.pass_context
+def marvcli_user_pw(ctx, username, password):
+    """Change password"""
+    app = create_app()
+    try:
+        app.um.user_pw(username, password)
+    except ValueError as e:
+        ctx.fail(e.args[0])
+
+
+@marvcli_user.command('rm')
+@click.argument('username')
+@click.pass_context
+def marvcli_user_rm(ctx, username):
+    """Remove a user"""
+    app = create_app()
+    try:
+        app.um.user_rm(username)
+    except ValueError as e:
+        ctx.fail(e.args[0])
