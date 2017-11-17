@@ -1,0 +1,4 @@
+BRANCH = "master"
+SHORTHASH = "3fcbfbb"
+REVCOUNT = 1635
+LATESTTAG = "0.3.0.3"
