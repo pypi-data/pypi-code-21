@@ -1,0 +1,361 @@
+import http.client
+import io
+import logging
+import mimetypes
+import re
+from abc import abstractmethod
+from pathlib import Path
+
+try:
+    from yarl import URL
+except ImportError:
+    URL = type('URL', (str,), {})
+
+
+logger = logging.getLogger(__name__)
+
+
+class MergeDict(dict):
+    def __init__(self, iterable=None, **kwargs):
+        if iterable:
+            result = {}
+            result.update(iterable)
+            result.update(kwargs)
+            kwargs = result
+        super().__init__()
+        for k, v in kwargs.items():
+            if type(v) is dict:
+                self[k] = type(self)(v)
+            else:
+                self[k] = v
+
+    def __repr__(self):
+        r = super().__repr__()
+        return type(self).__name__ + r
+
+    def __getattr__(self, item):
+        try:
+            return self[item]
+        except KeyError:
+            raise AttributeError(item)
+
+    def __setattr__(self, key, value):
+        self[key] = value
+
+    def __setitem__(self, key, value):
+        replace = key.endswith('!')
+        if replace:
+            key = key.strip('!')
+
+        is_dict = type(value) is dict or \
+                  isinstance(value, MergeDict)
+
+        if '.' in key:
+            *path, z = key.split('.')
+
+            d = self
+            for k in path:
+                if k not in d or not isinstance(d[k], dict):
+                    d[k] = type(self)()
+                d = d[k]
+
+            if replace and is_dict:
+                d[z] = type(self)(value)
+            elif replace or not is_dict or \
+                    z not in d or not isinstance(d[z], dict):
+                d[z] = value
+            else:
+                d[z].update(value)
+
+        elif not replace and is_dict and \
+                key in self and isinstance(self[key], type(self)):
+            self[key].update(value)
+
+        else:
+            if is_dict:
+                value = type(self)(value)
+            super().__setitem__(key, value)
+
+    def update(self, d, *args, **kwargs):
+        for k, v in d.items():
+            self[k] = v
+
+    def get(self, key, default=None):
+        try:
+            return self[key]
+        except:
+            return default
+
+    def __getitem__(self, item):
+        if '.' in item:
+            d = self
+            path = item.split('.')
+            for k in path:
+                d = d[k]
+            return d
+        else:
+            return super().__getitem__(item)
+
+    def __contains__(self, key):
+        try:
+            self[key]
+        except KeyError:
+            return False
+        else:
+            return True
+
+    def __call__(self, *args, **kwargs):
+        for arg in args:
+            if isinstance(arg, dict):
+                for k, v in arg.items():
+                    self[k] = v
+        for k, v in kwargs.items():
+            self[k] = v
+
+    def __dir__(self):
+        r = list(self.keys())
+        r.extend(super().__dir__())
+        return r
+
+    def copy(self):
+        cls = type(self)
+        return cls(self)
+
+
+class ConfigFileLoader:
+    extensions = ()
+    mime_types = ()
+
+    @abstractmethod  # pragma: no cover
+    def load_fd(self, fd):
+        raise NotImplementedError
+
+    @abstractmethod  # pragma: no cover
+    def load_path(self, path):
+        raise NotImplementedError
+
+
+class YamlLoader(ConfigFileLoader):
+    extensions = ('.yaml', '.yml')
+
+    def __init__(self, *args, **kwargs):
+        self._yaml = __import__('yaml')
+
+    def load_fd(self, fd):
+        return self._yaml.load(fd)
+
+
+class JsonLoader(ConfigFileLoader):
+    extensions = ('.json',)
+    mime_types = ('application/json',)
+
+    def __init__(self, *args, **kwargs):
+        self._json = __import__('json')
+
+    def load_fd(self, fd):
+        return self._json.load(fd)
+
+
+class ValueMatcher:
+    def __init__(self, value):
+        self._value = value
+
+    @abstractmethod  # pragma: no cover
+    def match(cls, value):
+        raise NotImplementedError
+
+    @abstractmethod  # pragma: no cover
+    def get_value(self):
+        raise NotImplementedError
+
+
+class IntValueMatcher(ValueMatcher):
+    fn = int
+
+    @classmethod
+    def match(cls, value):
+        try:
+            return cls(cls.fn(value))
+        except ValueError:
+            pass
+
+    def get_value(self):
+        return self._value
+
+
+class FloatValueMatcher(IntValueMatcher):
+    fn = float
+
+
+class MultilineValueMatcher(ValueMatcher):
+    re = re.compile(r'(\r\n)|(\n\r)|\r|\n')
+
+    @classmethod
+    def match(cls, value):
+        result = cls.re.split(value)
+        if len(result) > 1:
+            return cls(result)
+
+    def get_value(self):
+        return [i for i in self._value if i]
+
+
+class ListValueMatcher(ValueMatcher):
+    @classmethod
+    def match(cls, value):
+        if value.startswith('[') and value.endswith(']'):
+            return cls(value[1:-1])
+
+    def get_value(self):
+        return self._value.split(',')
+
+
+class StringReplaceLoader(ConfigFileLoader):
+    matchers = (
+        IntValueMatcher, FloatValueMatcher,
+        MultilineValueMatcher, ListValueMatcher,
+    )
+
+    def _replace(self, d, iterfunc=lambda d: d.items()):
+        for k, v in iterfunc(d):
+            if isinstance(v, dict):
+                self._replace(v)
+            elif isinstance(v, list):
+                self._replace(v, enumerate)
+            elif isinstance(v, str):
+                for matcher in self.matchers:
+                    m = matcher.match(v)
+                    if m is not None:
+                        v = m.get_value()
+                        if isinstance(v, list):
+                            self._replace(v, enumerate)
+                        d[k] = v
+                        break
+
+
+class IniLoader(StringReplaceLoader):
+    extensions = ('.ini',)
+
+    def __init__(self, *args, **kwargs):
+        self._configparser = __import__('configparser')
+
+    def new_configparser(self, **kwargs) -> 'configparser.ConfigParser':
+        kwargs.setdefault('allow_no_value', True)
+        return self._configparser.ConfigParser(**kwargs)
+
+    def load_fd(self, fd):
+        config = self.new_configparser()
+        config.read_file(fd)
+        return self._convert(config)
+
+    def load_path(self, path):
+        config = self.new_configparser()
+        config.read(path)
+        return self._convert(config)
+
+    def load_str(self, string):
+        config = self.new_configparser()
+        config.read_string(string)
+        return self._convert(config)
+
+    def _convert(self, config):
+        c = {}
+        for i in config.sections():
+            d = dict(config[i])
+            self._replace(d)
+            c[i] = d
+        return c
+
+
+class Registry(dict):
+    def __call__(self, cls):
+        for ext in cls.extensions:
+            if not isinstance(ext, str):
+                raise ValueError('Extension expect string, given {!r}'.format(ext))
+            elif ext in self:
+                raise ValueError('Duplicate extension {}'.format(ext))
+            self[ext] = cls
+        for mime in cls.mime_types:
+            if not isinstance(mime, str):
+                raise ValueError('MimeType expect string, given {!r}'.format(mime))
+            elif mime in self:
+                raise ValueError('Duplicate MimeType {}'.format(mime))
+            self[mime] = cls
+
+    def get(self, key):
+        if key not in self:
+            raise LookupError(key)
+        loader = self[key]
+        return loader()
+
+
+registry = Registry()
+registry(YamlLoader)
+registry(JsonLoader)
+registry(IniLoader)
+
+
+class Config:
+    def __init__(self, search_dirs=()):
+        self.search_dirs = []
+        for i in search_dirs:
+            if not isinstance(i, Path):
+                i = Path(i)
+            self.search_dirs.append(i)
+        self.uris = []
+
+    def load_conf(self, fd, *, path=None, mime_type=None, response=None):
+        if isinstance(response, http.client.HTTPResponse):
+            url = URL(response.geturl())
+            self.uris.append(url)
+            mime_type = response.headers.get('Content-Type')
+            if mime_type:
+                mime_type = mime_type.split(';')[0].strip()
+            logger.info('Config found: {} [{}]'.format(url, mime_type))
+        if path:
+            loader = registry.get(path.suffix)
+            path = path.absolute()
+            self.uris.append(path)
+            logger.info('Config found: {}'.format(path))
+        elif mime_type in registry:
+            loader = registry.get(mime_type)
+        elif mimetypes.guess_extension(mime_type) in registry:
+            loader = registry.get(mimetypes.guess_extension(mime_type))
+        elif not mime_type:
+            raise LookupError('Not found mime_type %s' % mime_type)
+        else:
+            raise NotImplemented
+        with fd:
+            return loader.load_fd(fd)
+
+    def load(self, *filenames, base=None):
+        if base is None:
+            config = MergeDict()
+        else:
+            config = base
+        fns = []
+        for fn in filenames:
+            if isinstance(fn, str):
+                fn = Path(fn)
+            if isinstance(fn, Path):
+                if not fn.is_absolute():
+                    fns.append(fn)
+                    continue
+                c = self.load_conf(fn.open(encoding='utf-8'), path=fn)
+            elif isinstance(fn, http.client.HTTPResponse):
+                c = self.load_conf(fn, response=fn)
+            elif isinstance(fn, (io.TextIOWrapper, io.BufferedReader)):
+                c = self.load_conf(fn, path=Path(fn.name))
+            else:
+                raise ValueError(fn)
+            if c:
+                config(c)
+        for d in self.search_dirs:
+            for fn in fns:
+                if not Path(d, fn).exists():
+                    continue
+                f = Path(d, fn)
+                c = self.load_conf(f.open(encoding='utf-8'), path=f)
+                if c:
+                    config(c)
+        return config
