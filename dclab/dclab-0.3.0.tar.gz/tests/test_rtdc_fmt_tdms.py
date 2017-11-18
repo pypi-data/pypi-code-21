@@ -1,0 +1,244 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+"""Test tdms file format"""
+from __future__ import print_function
+
+import io
+import os
+import pathlib
+import shutil
+import tempfile
+import warnings
+import zipfile
+
+import numpy as np
+
+from dclab import new_dataset
+import dclab.rtdc_dataset.fmt_tdms.naming
+
+from helper_methods import example_data_dict, retreive_tdms, example_data_sets, cleanup
+
+
+def test_compatibility_minimal():
+    ds = new_dataset(retreive_tdms("rtdc_data_minimal.zip"))
+    assert ds.config["setup"]["channel width"] == 20
+    assert ds.config["setup"]["chip region"].lower() == "channel"
+    assert ds.config["setup"]["flow rate"] == 0.12
+    assert ds.config["imaging"]["pixel size"] == 0.34
+    assert ds.config["imaging"]["flash current"] == 70
+    cleanup()
+
+
+def test_compatibility_shapein201():
+    ds = new_dataset(retreive_tdms("rtdc_data_shapein_v2.0.1.zip"))
+    assert ds.config["setup"]["channel width"] == 20
+    assert ds.config["setup"]["chip region"].lower() == "channel"
+    assert ds.config["setup"]["software version"] == "ShapeIn 2.0.1"
+    assert ds.config["imaging"]["pixel size"] == 0.34
+    assert ds.config["imaging"]["flash duration"] == 2
+    assert ds.config["experiment"]["date"] == "2017-10-12"
+    assert ds.config["experiment"]["time"] == "12:54:31"
+    
+    
+    cleanup()
+
+def test_contour_basic():
+    ds = new_dataset(retreive_tdms(example_data_sets[1]))
+    assert len(ds["contour"]) == 12
+    assert np.allclose(np.average(ds["contour"][0]), 38.488764044943821)
+    assert ds["contour"]._initialized
+    cleanup()
+
+
+def test_contour_naming():
+    # Test that we always find the correct contour name
+    ds = new_dataset(retreive_tdms(example_data_sets[0]))
+    dp = pathlib.Path(ds.path).resolve()
+    dn = dp.parent
+    contfile = dn / "M1_0.120000ul_s_contours.txt"
+    contfileshort = dn / "M1_contours.txt"
+    del ds
+    
+    # "M1_0.120000ul_s_contours.txt" should have priority over
+    # "M1_contours.txt".
+    with contfileshort.open(mode="w"):
+        pass
+    ds2 = new_dataset(dp)
+    assert ds2["contour"].identifier == str(contfile)
+    assert not np.allclose(ds2["contour"][1], 0)
+    del ds2
+    
+    # Check if "M1_contours.txt" is used if the other is not
+    # there.
+    os.remove(str(contfileshort))
+    contfile.rename(contfileshort)
+    ds3 = new_dataset(dp)
+    assert ds3["contour"].identifier == str(contfileshort)
+    del ds3
+    contfileshort.rename(contfile)
+    
+    # Create M10 file
+    with (dn / "M10_contours.txt").open(mode="w"):
+        pass
+    ds4 = new_dataset(dp)
+    assert ds4["contour"].identifier == str(contfile)
+    del ds4
+    
+    # Check when there is no contour file
+    os.remove(str(contfile))
+    # This will issue a warning that no contour data was found.
+    ds5 = new_dataset(dp)
+    assert ds5["contour"].identifier is None
+
+
+def test_contour_negative_offset():
+    ds = new_dataset(retreive_tdms(example_data_sets[1]))
+    _a = ds["contour"][0]
+    ds["contour"].event_offset = 1
+    assert np.all(ds["contour"][0] == np.zeros((2,2), dtype=int))
+    cleanup()
+
+
+def test_contour_not_initialized():
+    ds = new_dataset(retreive_tdms(example_data_sets[1]))
+    assert ds["contour"]._initialized == False
+    cleanup()
+
+
+def test_image_basic():
+    ds = new_dataset(retreive_tdms(example_data_sets[1]))
+    # Transition image
+    assert np.all(np.isnan(ds["image"][0]))
+    # Real image
+    assert np.allclose(np.average(ds["image"][1]), 45.1490478515625)
+    cleanup()
+
+
+def test_image_column_length():
+    ds = new_dataset(retreive_tdms(example_data_sets[1]))
+    assert len(ds["image"]) == 3
+    cleanup()
+
+
+def test_image_out_of_bounds():
+    ds = new_dataset(retreive_tdms(example_data_sets[1]))
+    try:
+        _a = ds["image"][5]
+    except IndexError:
+        pass
+    else:
+        raise ValueError("IndexError should have been raised!")
+    cleanup()
+
+
+def test_large_fov():
+    ds = new_dataset(retreive_tdms(example_data_sets[3]))
+    # initial image is missing
+    assert np.all(np.isnan(ds["image"][0]))
+    # initial contour is empty
+    assert np.allclose(ds["contour"][0], 0)
+    # maximum of contour is larger than 255 (issue #167)
+    assert ds["contour"][1].max() == 815
+    # compute brightness with given contour
+    # Remove the brightness column and let it recompute
+    # using the ancillary columns. Besides testing the
+    # correct positioning of the contour, this is a
+    # sanity test for the brightness computation.
+    bavg = ds._events.pop("bright_avg")
+    bcom = ds["bright_avg"]
+    assert np.allclose(bavg[1], bcom[1])
+    cleanup()
+
+
+def test_load_tdms_all():
+    for ds in example_data_sets:
+        tdms_path = retreive_tdms(ds)
+        ds = new_dataset(tdms_path)
+    cleanup()
+
+
+def test_load_tdms_avi_files():
+    tdms_path = retreive_tdms(example_data_sets[1])
+    edest = pathlib.Path(tdms_path).parent
+    ds1 = new_dataset(tdms_path)
+    assert pathlib.Path(ds1["image"].video_file).name == "M1_imaq.avi"
+    shutil.copyfile(str(edest / "M1_imaq.avi"),
+                    str(edest / "M1_imag.avi"))
+    ds2 = new_dataset(tdms_path)
+    # prefer imag over imaq
+    assert pathlib.Path(ds2["image"].video_file).name == "M1_imag.avi"
+    shutil.copyfile(str(edest / "M1_imaq.avi"),
+                    str(edest / "M1_test.avi"))
+    ds3 = new_dataset(tdms_path)
+    # ignore any other videos
+    assert pathlib.Path(ds3["image"].video_file).name == "M1_imag.avi"
+    os.remove(str(edest / "M1_imaq.avi"))
+    os.remove(str(edest / "M1_imag.avi"))
+    ds4 = new_dataset(tdms_path)
+    # use available video if ima* not there
+    assert pathlib.Path(ds4["image"].video_file).name == "M1_test.avi"
+    cleanup()
+
+
+def test_load_tdms_simple():
+    tdms_path = retreive_tdms(example_data_sets[0])
+    ds = new_dataset(tdms_path)
+    assert ds._filter.shape[0] == 156
+    cleanup()
+
+
+def test_project_path():
+    tfile = retreive_tdms(example_data_sets[0])
+    ds = dclab.new_dataset(tfile)
+    assert ds.hash == "69733e31b005c145997fac8a22107ded"
+    assert ds.format == "tdms"
+    tpath = pathlib.Path(tfile).resolve()
+    a = dclab.rtdc_dataset.fmt_tdms.get_project_name_from_path(str(tpath))
+    b = dclab.rtdc_dataset.fmt_tdms.get_project_name_from_path(str(tpath.parent))
+    assert a == b
+    c = dclab.rtdc_dataset.fmt_tdms.get_project_name_from_path(str(tpath.parent / "online" / tpath.name))
+    d = dclab.rtdc_dataset.fmt_tdms.get_project_name_from_path(str(tpath.parent / "online" / "data" / tpath.name))
+    e = dclab.rtdc_dataset.fmt_tdms.get_project_name_from_path(str(tpath.parent / "online" / "data"))
+    
+    assert a == e
+    assert a == c
+    assert a == d 
+    cleanup()
+
+
+def test_trace_basic():
+    ds = new_dataset(retreive_tdms(example_data_sets[1]))
+    assert ds["trace"].__repr__().count("<not loaded into memory>"), "traces should not be loaded into memory before first access"
+    assert len(ds["trace"]) == 6
+    assert np.allclose(np.average(ds["trace"]["fl1_median"][0]), 287.08999999999997)
+    cleanup()
+
+
+def test_trace_import_fail():
+    # make sure undefined trace data does not raise an error
+    tdms_path = retreive_tdms(example_data_sets[1])
+    dclab.definitions.FLUOR_TRACES.append("peter")
+    dclab.rtdc_dataset.fmt_tdms.naming.tr_data_map["peter"] = [u'ukwn', u'ha']
+    new_dataset(tdms_path)
+    # clean up
+    dclab.rtdc_dataset.fmt_tdms.naming.tr_data_map.pop("peter")
+    dclab.definitions.FLUOR_TRACES.pop(-1)
+    cleanup()
+
+
+def test_trace_methods():
+    ds = new_dataset(retreive_tdms(example_data_sets[1]))
+    for k in list(ds["trace"].keys()):
+        assert  k in  dclab.definitions.FLUOR_TRACES
+    for k in ds["trace"]:
+        assert  k in  dclab.definitions.FLUOR_TRACES
+    assert ds["trace"].__repr__().count("<loaded into memory>")
+    cleanup()
+
+
+if __name__ == "__main__":
+    # Run all tests
+    loc = locals()
+    for key in list(loc.keys()):
+        if key.startswith("test_") and hasattr(loc[key], "__call__"):
+            loc[key]()
