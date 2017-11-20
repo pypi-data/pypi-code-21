@@ -1,0 +1,1 @@
+from captchamanager.manager import CaptchaManager
