@@ -1,0 +1,1 @@
+pytest_plugins = ['manhattan.forms.tests.fixtures']
