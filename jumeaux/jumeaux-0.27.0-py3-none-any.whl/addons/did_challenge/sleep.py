@@ -1,0 +1,31 @@
+# -*- coding:utf-8 -*-
+
+import logging
+import random
+
+import time
+from owlmixin import OwlMixin
+
+from jumeaux.addons.did_challenge import DidChallengeExecutor
+from jumeaux.models import DidChallengeAddOnPayload
+
+
+logger = logging.getLogger(__name__)
+
+
+class Config(OwlMixin):
+    max: float
+    min: float
+
+
+class Executor(DidChallengeExecutor):
+    def __init__(self, config: dict):
+        self.config: Config = Config.from_dict(config or {})
+
+    def exec(self, payload: DidChallengeAddOnPayload) -> DidChallengeAddOnPayload:
+        sec: float = random.uniform(self.config.min, self.config.max)
+
+        logger.info(f"Sleep:  {sec:.2f} sec")
+        time.sleep(sec)
+
+        return payload
