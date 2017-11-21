@@ -1,0 +1,454 @@
+"""A conduit for CI Pipelines in AWS!"""
+import json
+
+import boto3
+import yaml
+from aws_conduit import conduit_factory as factory
+
+CONFIG_PREFIX = 'conduit.yaml'
+
+IAM = boto3.client('iam')
+STS = boto3.client('sts')
+ROW_FORMAT = "{:<30}" * 3
+
+
+def configure():
+    """
+    Setup necessary resources for running Conduit
+
+    Return:
+        bucket: An object handle on the Conduit configuration bucket.
+    """
+    account_id = STS.get_caller_identity().get('Account')
+    session = boto3.session.Session()
+    region = session.region_name
+    print("Account Id: " + account_id)
+    start = factory.start(account_id)
+    bucket = start.create_s3()
+    start.create_iam_role()
+    config = bucket.get_config(CONFIG_PREFIX)
+    print("Ensuring Conduit is up to date...")
+    for portfolio in config['portfolios']:
+        print("Associating conduit with {}".format(portfolio.name))
+        portfolio.associate_conduit(account_id)
+    return bucket
+
+
+def new_portfolio(name, description, tags=None):
+    """
+    Create a new portfolio.
+
+    Args:
+        name (str): The name of the portfolio to create.
+        description (str): A description of the portfolio to create.
+        tags (list): An optional list of tags to apply to all products in the portfolio.
+
+    Return:
+        portfolio: An object handle on the new portfolio.
+    """
+    if name is None or description is None:
+        raise ValueError("name and description must have values")
+    if tags is None:
+        tags = []
+    bucket = configure()
+    alias = get_alias()
+    if alias:
+        print("Creating a new portfolio...")
+        portfolio = factory.portfolio(name, alias, portfolio_description=description)
+        portfolio.create(tags)
+        print("Create complete...")
+        config = bucket.get_config(CONFIG_PREFIX)
+        if 'portfolios' not in config:
+            config['portfolios'] = []
+        config['portfolios'].append(portfolio)
+        bucket.put_config(config, CONFIG_PREFIX)
+        return portfolio
+    else:
+        raise ValueError('An account alias needs to be set!')
+
+
+def update_portfolio(portfolio_id, name=None, description=None):
+    """
+    Update a portfolio.
+
+    Args:
+        name (str): The name of the portfolio to create.
+        description (str): A description of the portfolio to create.
+
+    Return:-
+        portfolio: An object handle on the portfolio.
+    """
+    if portfolio_id is None:
+        raise ValueError("A portfolio ID must be provided")
+    bucket = configure()
+    config = bucket.get_config(CONFIG_PREFIX)
+    print("Updating portfolio with id: {}".format(portfolio_id))
+    for portfolio in config['portfolios']:
+        if portfolio.portfolio_id == portfolio_id:
+            if name is not None:
+                portfolio.name = name
+            if description is not None:
+                portfolio.description = description
+            portfolio.update()
+            print("Portfolio updated successfully...")
+            break
+
+    bucket.put_config(config, CONFIG_PREFIX)
+
+
+def delete_portfolio(portfolio_id):
+    """
+    Delete a portfolio.
+
+    Args:
+        id (str): The id of the portfolio to delete.
+    """
+    if portfolio_id is None:
+        raise ValueError("A portfolio id must be provided")
+    bucket = configure()
+    config = bucket.get_config(CONFIG_PREFIX)
+    print("Deleting portfolio with id: {}".format(portfolio_id))
+    for portfolio in config['portfolios']:
+        if portfolio.portfolio_id == portfolio_id:
+            for product in portfolio.products:
+                print("Disassociating product with id: {}".format(product.product_id))
+                product.disassociate(portfolio.portfolio_id)
+            portfolio.delete()
+            config['portfolios'].remove(portfolio)
+
+    bucket.put_config(config, CONFIG_PREFIX)
+
+
+def list_portfolios(token=None):
+    print(ROW_FORMAT.format("Name", "Id", "Description"))
+    print("----------" * 9)
+    _list_all_portfolios()
+
+
+def _list_all_portfolios(token=None):
+    service_catalog = boto3.client('servicecatalog')
+    if token is not None:
+        response = service_catalog.list_portfolios(
+            PageToken=token
+        )
+    else:
+        response = service_catalog.list_portfolios()
+    for portfolio in response['PortfolioDetails']:
+        print(ROW_FORMAT.format(portfolio['DisplayName'], portfolio['Id'], portfolio['Description']))
+    if 'NextPageToken' in response:
+        _list_all_portfolios(token=response['NextPageToken'])
+
+
+def new_product(name, description, cfntype, portfolio_name, tags=None):
+    """
+    Create a new product.
+
+    Args:
+        name (str): The name of the product to create.
+        description (str): A brief description of the product.
+        cfntype (str): One of [json, yaml, yml]
+        portfolio_name (str): The name of the portfolio to add the product to.
+
+    Return:
+        product: An object handle on the new product.
+    """
+    if name is None or description is None or cfntype is None or portfolio_name is None:
+        raise ValueError("name, description, cfntype and portfolio_name must have values")
+    if tags is None:
+        tags = []
+    bucket = configure()
+    alias = get_alias()
+    print("Creating a new product...")
+    product = factory.product(name, alias, bucket,
+                              cfntype, portfolio_name,
+                              product_description=description)
+    portfolio = factory.portfolio(portfolio_name, alias)
+    portfolio_id = portfolio.get_id()
+    config = bucket.get_config(CONFIG_PREFIX)
+    support = dict() if 'support' not in config else config['support']
+    product.create(support, tags)
+    print("Product created...")
+    product.add_to_portfolio(portfolio_id)
+    print("Product assigned to portfolio: {}".format(portfolio_id))
+    for portfolio in config['portfolios']:
+        if portfolio.name == portfolio_name:
+            portfolio.products.append(product)
+    bucket.put_config(config, CONFIG_PREFIX)
+    return product
+
+
+def update_product(product_id, name, description, cfntype, tags=None):
+    """
+    Update a portfolio.
+
+    Args:
+        name (str): The name of the portfolio to create.
+        description (str): A description of the portfolio to create.
+
+    Return:-
+        portfolio: An object handle on the portfolio.
+    """
+    if product_id is None:
+        raise ValueError("A product ID must be provided")
+    bucket = configure()
+    config = bucket.get_config(CONFIG_PREFIX)
+    print("Updating product with id: {}".format(product_id))
+    for portfolio in config['portfolios']:
+        for product in portfolio.products:
+            if product.product_id == product_id:
+                if name is not None:
+                    product.name = name
+                if description is not None:
+                    product.description = description
+                if cfntype is not None:
+                    product.cfntype = cfntype
+                if tags is not None:
+                    product.tags = tags
+                support = dict()
+                if 'support' in config:
+                    support = config['support']
+                product.update(support)
+                print("Product updated successfully...")
+                break
+
+    bucket.put_config(config, CONFIG_PREFIX)
+
+
+def delete_product(product_id, product_name):
+    """
+    Delete a product.
+
+    Args:
+        id (str): The id of the product to delete.
+    """
+    if product_id is None:
+        raise ValueError("A product ID must be provided")
+    bucket = configure()
+    config = bucket.get_config(CONFIG_PREFIX)
+    print("Deleting product with id: {}".format(product_id))
+    for portfolio in config['portfolios']:
+        for product in portfolio.products:
+            if product.product_id == product_id:
+                product.delete()
+                portfolio.products.remove(product)
+                print("Product deleted successfully...")
+                break
+
+    bucket.put_config(config, CONFIG_PREFIX)
+
+
+def associate_product_with_portfolio(product_id, portfolio_id):
+    if portfolio_id is None:
+        raise ValueError("A portfolio id must be provided")
+    if product_id is None:
+        raise ValueError("A product id must be provided")
+    bucket = configure()
+    config = bucket.get_config(CONFIG_PREFIX)
+    print("Associating product with portfolio...")
+
+    client = boto3.client('servicecatalog')
+    client.associate_product_with_portfolio(
+        ProductId=product_id,
+        PortfolioId=portfolio_id
+    )
+
+    print("Association successful...")
+    print("Finding product by id...")
+    product = factory.product_by_id(product_id, bucket)
+
+    print("Reflecting changes in Conduit config...")
+    for portfolio in config['portfolios']:
+        if portfolio.portfolio_id == portfolio_id:
+            portfolio.products.append(product)
+            product.portfolio = portfolio.name
+
+    bucket.put_config(config, CONFIG_PREFIX)
+
+
+def terminate_provisioned_product(product_id, stack_name):
+    if product_id is None:
+        raise ValueError("A product id must be provided")
+    bucket = configure()
+    config = bucket.get_config(CONFIG_PREFIX)
+    print("Terminating product...")
+    product = _find_product_by_id(config, product_id)
+    product.terminate(stack_name)
+
+
+def provision_product(product_id, product_name, name):
+    if product_id is None:
+        raise ValueError("A product id must be provided")
+    bucket = configure()
+    config = bucket.get_config(CONFIG_PREFIX)
+    print("Provisioning product...")
+    product = _find_product_by_id(config, product_id)
+    _provision(product, name)
+
+
+def list_products():
+    print(ROW_FORMAT.format("Name", "Id", "Description"))
+    print("----------" * 9)
+    _list_all_products()
+
+
+def _list_all_products(token=None):
+    service_catalog = boto3.client('servicecatalog')
+    if token is not None:
+        response = service_catalog.search_products_as_admin(
+            PageToken=token
+        )
+    else:
+        response = service_catalog.search_products_as_admin()
+    for product in response['ProductViewDetails']:
+        summary = product['ProductViewSummary']
+        print(ROW_FORMAT.format(summary['Name'], summary['ProductId'], summary['ShortDescription']))
+    if 'NextPageToken' in response:
+        _list_all_portfolios(token=response['NextPageToken'])
+
+
+def get_alias():
+    """
+    Get the users account alias.
+
+    Return:
+        alias: The first known account alias.
+    """
+    aliases = IAM.list_account_aliases()
+    if aliases and aliases['AccountAliases']:
+        return aliases['AccountAliases'][0]
+
+
+def set_default_support_config(description=None, email=None, url=None):
+    """
+    Set the support configuration for your Service Catalog products.
+
+    Args:
+        description (str): Support information about the product.
+        email (str): Contact email for product support.
+        url (str): Contact URL for product support.
+    """
+    bucket = configure()
+    print("Reading current configuration...")
+    config = bucket.get_config(CONFIG_PREFIX)
+    support = dict()
+    if description:
+        support['description'] = description
+    if email:
+        support['email'] = email
+    if url:
+        support['url'] = url
+    config['support'] = support
+    print("Writing new support configuration...")
+    bucket.put_config(config, CONFIG_PREFIX)
+
+
+def _find_build_product(spec, config):
+    portfolio = None
+    product = None
+    for port in config['portfolios']:
+        if port.name == spec['portfolio']:
+            portfolio = port
+            for prod in portfolio.products:
+                if prod.name == spec['product']:
+                    product = prod
+                    break
+    if portfolio is None or not portfolio.exists():
+        raise ValueError("The specified portfolio does not exist: {}".format(spec['portfolio']))
+    if product is None or not product.exists():
+        raise ValueError("The product {} does not exist in portfolio {}".format(spec['product'], spec['portfolio']))
+    return product
+
+
+def build(action):
+    print("Releasing a new build version...")
+    bucket = configure()
+    spec = yaml.safe_load(open('conduitspec.yaml').read())
+    config = bucket.get_config(CONFIG_PREFIX)
+    product = _find_build_product(spec, config)
+    product.release(action, spec['cfn']['template'], product.version)
+    bucket.put_config(config, CONFIG_PREFIX)
+
+    if action != 'build':
+        product.tidy_versions()
+
+
+def provision_product(name):
+    if name is None:
+        raise ValueError("A stage must be provided")
+    bucket = configure()
+    spec = yaml.safe_load(open('conduitspec.yaml').read())
+    if 'deployProfile' in spec:
+        update_iam_role(spec)
+    config = bucket.get_config(CONFIG_PREFIX)
+    print("Provisioning product...")
+    product = _find_build_product(spec, config)
+    _provision(product, name)
+
+
+def _provision(product, name):
+    version_id = product.get_version_id()
+    client = boto3.client('servicecatalog')
+    launch_paths = client.list_launch_paths(
+        ProductId=product.product_id,
+    )
+    print("Getting launch path...")
+    if launch_paths['LaunchPathSummaries']:
+        launch_path = launch_paths['LaunchPathSummaries'][0]['Id']
+        response = client.describe_provisioning_parameters(
+            ProductId=product.product_id,
+            ProvisioningArtifactId=version_id,
+            PathId=launch_path
+        )
+        print("Getting input parameters...")
+        params = []
+        for param in response['ProvisioningArtifactParameters']:
+            input_value = input('{} (Default: {}): '.format(param['ParameterKey'],
+                                                            param['DefaultValue']))
+            if input_value is None or input_value == '':
+                input_value = param['DefaultValue']
+            param = dict(
+                Key=param['ParameterKey'],
+                Value=input_value
+            )
+            params.append(param)
+        product.provision(params, name)
+
+
+def terminate_product(product_name):
+    if product_name is None:
+        raise ValueError("A product name must be provided")
+    bucket = configure()
+    spec = yaml.safe_load(open('conduitspec.yaml').read())
+    config = bucket.get_config(CONFIG_PREFIX)
+    print("Terminating product...")
+    product = _find_build_product(spec, config)
+    product.terminate(product_name)
+
+
+def _find_product_by_id(config, product_id):
+    for portfolio in config['portfolios']:
+        for product in portfolio.products:
+            if product.product_id == product_id:
+                return product
+    raise ValueError('Product not found: {}'.format(product_id))
+
+
+def update_iam_role(spec):
+    if 'deployProfile' in spec:
+        statements = []
+        policy = dict(
+            Version="2012-10-17",
+            Statement=statements
+        )
+        for entry in spec['iam']:
+            statement = dict(
+                Effect="Allow",
+                Action=entry['actions'],
+                Resource=entry['resources']
+            )
+            statements.append(statement)
+        boto3.client('iam').put_role_policy(
+            RoleName='conduit-provisioner-role',
+            PolicyName='conduit-policy',
+            PolicyDocument=json.dumps(policy)
+        )
