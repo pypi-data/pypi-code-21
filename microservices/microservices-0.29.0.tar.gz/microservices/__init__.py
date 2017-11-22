@@ -1,0 +1,1 @@
+from microservices.version import get_version
