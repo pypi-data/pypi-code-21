@@ -1,0 +1,26 @@
+#!/usr/bin/env python
+import os
+from setuptools import setup, find_packages
+
+__version__ = '0.4.0'
+
+datadir = os.path.join('jars')
+data_files = [(d, [os.path.join(d,f) for f in files])
+    for d, folders, files in os.walk(datadir)]
+
+print(data_files)
+
+setup(
+    name='kooki',
+    version=__version__,
+    description='The ultimate document generator.',
+    author='Noel Martignoni',
+    author_email='noel@martignoni.fr',
+    url='https://gitlab.com/kooki/kooki',
+    scripts=['scripts/kooki'],
+    install_requires=['markdown', 'empy', 'pyyaml', 'toml', 'requests', 'termcolor', 'vcstool', 'libsass'],
+    packages=find_packages(exclude=['contrib', 'docs', 'tests*', 'jars']),
+    test_suite='tests',
+    python_requires='>=3',
+    data_files=data_files,
+)
