@@ -1,0 +1,2 @@
+from __future__ import absolute_import
+from sshmaster.sshmaster import ssh_cmd,scp_cmd,ssh_cmd_multi_try,ssh_cmd_auto_check,scp_cmd_multi_try,create_remote_file,create_remote_file_multi_try
