@@ -1,0 +1,1 @@
+from crypto_mediator.clients.client import MetaClient as CryptoMediator
