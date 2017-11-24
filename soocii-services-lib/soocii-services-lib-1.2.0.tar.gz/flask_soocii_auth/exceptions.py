@@ -1,0 +1,2 @@
+class InvalidTokenSecretError(Exception):
+    pass
