@@ -1,0 +1,858 @@
+"""
+sqlite3 based utils for statistical analysis
+
+reeling off rows from db(sqlite3) and saving them back to db
+"""
+import os
+import re
+import sqlite3
+import copy
+import warnings
+import inspect
+# import operator
+import numpy as np
+
+# TODO: figure this out if this causes troubles in macos
+import matplotlib
+matplotlib.use('TkAgg')
+
+import matplotlib.pyplot as plt
+
+import statistics as st
+import pandas as pd
+from pandas.plotting import scatter_matrix
+
+from collections import OrderedDict
+from contextlib import contextmanager
+from itertools import groupby, islice, chain, tee, \
+    zip_longest
+from pypred import Predicate
+
+from .util import isnum, listify, peek_first, \
+    parse_model, random_string
+
+# pandas raises warnings because maintainers of statsmodels are lazy
+warnings.filterwarnings('ignore')
+import statsmodels.api as sm
+
+
+WORKSPACE = ''
+
+
+@contextmanager
+def dbopen(dbfile, cache_size=100000, temp_store=2):
+    # temp_store might be deprecated
+    "Connects to SQL database(sqlite)"
+    splus = SQLPlus(dbfile, cache_size, temp_store)
+    try:
+        yield splus
+    finally:
+        # should I close the cursor?
+        splus._cursor.close()
+        splus.conn.commit()
+        splus.conn.close()
+
+
+# aggreate function builder
+class AggBuilder:
+    def __init__(self):
+        self.rows = []
+
+    def step(self, *args):
+        self.rows.append(args)
+
+    def finalize(self):
+        return self.rows
+
+
+# Don't try to be smart, unless you really know well
+class Row:
+    "mutable version of sqlite3.row"
+    # works for python 3.6 and higher
+    def __init__(self, **kwargs):
+        super().__setattr__('_ordered_dict', OrderedDict(**kwargs))
+
+    def copy(self):
+        r = Row()
+        for c, v in zip(self.columns, self.values):
+            r[c] = v
+        return r
+
+    @property
+    def columns(self):
+        return list(self._ordered_dict.keys())
+
+    @property
+    def values(self):
+        return list(self._ordered_dict.values())
+
+    def __getattr__(self, name):
+        return self._ordered_dict[name]
+
+    def __setattr__(self, name, value):
+        self._ordered_dict[name] = value
+
+    def __delattr__(self, name):
+        del self._ordered_dict[name]
+
+    def __getitem__(self, name):
+        return self._ordered_dict[name]
+
+    def __setitem__(self, name, value):
+        self._ordered_dict[name] = value
+
+    def __delitem__(self, name):
+        del self._ordered_dict[name]
+
+    def __repr__(self):
+        content = ', '.join(c + '=' + repr(v) for c, v in
+                            zip(self.columns, self.values))
+        return 'Row(' + content + ')'
+
+    # for pickling, very important
+    def __getstate__(self):
+        return self.__dict__
+
+    def __setstate__(self, d):
+        self.__dict__.update(d)
+
+    # TODO:
+    # hasattr doesn't work properly
+    # you can't make it work by changing getters and setters
+    # to an ordinary way. but it is slower
+
+
+class Rows:
+    """
+    a shallow wrapper of a list of row instances """
+    # don't try to define __getattr__, __setattr__
+    # list objects has a lot of useful attributes that can't be overwritten
+    # not the same situation as 'row' class
+
+    # inheriting list can be problemetic
+    # when you want to use this as a superclass
+    # see 'where' method, you must return 'self' but it's not efficient
+    # (at least afaik) if you inherit list
+
+    def __init__(self, rows):
+        self.rows = list(rows)
+
+    def __len__(self):
+        return len(self.rows)
+
+    # __getitem__ enables you to iterate 'Rows'
+    def __getitem__(self, k):
+        "cols: integer or list of strings or comma separated string"
+        if isinstance(k, int):
+            return self.rows[k]
+        if isinstance(k, slice):
+            # shallow copy for non-destructive slicing
+            return self._newrows(self.rows[k])
+        # Now k is a column name
+        return [r[k] for r in self.rows]
+
+    def __setitem__(self, k, v):
+        if isinstance(k, int) or isinstance(k, slice):
+            self.rows[k] = v
+            return
+
+        # same value is assigned to them all
+        if not isinstance(v, list):
+            for r in self.rows:
+                r[k] = v
+        else:
+            assert len(self) == len(v), "Invalid assignment"
+            for r, v1 in zip(self.rows, v):
+                r[k] = v1
+
+    def __delitem__(self, k):
+        if isinstance(k, int) or isinstance(k, slice):
+            del self.rows[k]
+            return
+
+        for r in self.rows:
+            del r[k]
+
+    def __add__(self, other):
+        return self._newrows(self.rows + other.rows)
+
+    # zipping like left join, based on column
+    def lzip(self, col, *rss):
+        """self and rss are all ordered(ascending) and
+        none of them contains dups
+        Parameters:
+            rss: a list of a sequence of instances of 'Row',
+                a sequence can be either a list of iterator
+        """
+        # This should be fast, so the verification steps are ignored
+        rss = [iter(rs) for rs in rss]
+
+        def gen(rs0, rs1):
+            doneflag = False
+            try:
+                r1 = next(rs1)
+            except:
+                doneflag = True
+
+            for r0 in rs0:
+                if doneflag:
+                    yield None
+                    continue
+                v0, v1 = r0[col], r1[col]
+                if v0 < v1:
+                    yield None
+                    continue
+                elif v0 == v1:
+                    yield r1
+                    try:
+                        r1 = next(rs1)
+                    except:
+                        doneflag = True
+                else:
+                    while v0 > v1:
+                        try:
+                            # throw away
+                            r1 = next(rs1)
+                            v1 = r1[col]
+                        except:
+                            doneflag = True
+                            break
+                        # nothing to yield
+                    if v0 == v1:
+                        yield r1
+                    # passed over
+                    else:
+                        yield None
+
+        rs0s = tee(iter(self), len(rss) + 1)
+        seqs = (gen(rs0, rs1) for rs0, rs1 in zip(rs0s[1:], rss))
+        yield from zip(rs0s[0], *seqs)
+
+    def roll(self, size=None, step=None, col=None, nextfn=None):
+        "group rows over time, allowing overlaps"
+        self.order(col)
+        for ls in _roll(self.rows, size, step, _build_keyfn(col), nextfn):
+            yield self._newrows(ls)
+
+    # destructive!!!
+    def order(self, key, reverse=False):
+        # You can pass fn as key arg but not recommended
+        self.rows.sort(key=_build_keyfn(key), reverse=reverse)
+        return self
+
+    def copy(self):
+        "shallow copy"
+        # I'm considering the inheritance
+        return copy.copy(self)
+
+    def _newrows(self, rs):
+        # copying rows and build Rows object
+        # Am I worring too much?, this is for inheritance
+        self.rows, temp = [], self.rows
+        other = self.copy()
+        other.rows, self.rows = list(rs), temp
+        return other
+
+    def where(self, pred):
+        if isinstance(pred, str):
+            obj = Predicate(pred)
+            return self._newrows([r for r in self
+                                  if obj.evaluate(r._ordered_dict)])
+        return self._newrows([r for r in self if pred(r)])
+
+    def corr(self, cols=None):
+        "Lower left: Pearson, Upper right: Spearman"
+        cols = cols or self[0].columns
+        df = self.df(cols)
+        corr1 = df.corr()
+        corr2 = df.corr('spearman')
+        columns = list(corr1.columns.values)
+        c0 = '_'
+
+        lcorr1 = corr1.values.tolist()
+        lcorr2 = corr2.values.tolist()
+        for i in range(len(columns)):
+            for j in range(i):
+                lcorr2[i][j] = lcorr1[i][j]
+        for i in range(len(columns)):
+            lcorr2[i][i] = ''
+        result = []
+        for c, ls in zip(columns, lcorr2):
+            r = Row()
+            r[c0] = c
+            for c, x in zip(columns, ls):
+                r[c] = x
+            result.append(r)
+        return self._newrows(result)
+
+    def isnum(self, *cols):
+        "another simplified filtering, numbers only"
+        cols = listify(','.join(cols))
+        return self._newrows([r for r in self if isnum(*(r[c] for c in cols))])
+
+    # Won't be used often
+    def istext(self, *cols):
+        "another simplified filtering, texts(string) only"
+        cols = listify(','.join(cols))
+        return self._newrows([r for r in self
+                              if all(isinstance(r[c], str) for c in cols)])
+
+    def avg(self, col, wcol=None):
+        # wcol: column for weight
+        if wcol:
+            rs = self.isnum(col, wcol)
+            total = sum(r[wcol] for r in rs)
+            return sum(r[col] * r[wcol] for r in rs) / total
+        else:
+            return st.mean(r[col] for r in self if isnum(r[col]))
+
+    def ols(self, model, rows=True):
+        y, *xs = parse_model(model)
+        X = [[r[x] for x in xs] for r in self]
+        res = sm.OLS(self[y], sm.add_constant(X)).fit()
+        if rows:
+            rs = []
+            for i, param in enumerate(['const'] + xs):
+                r = Row(param=param)
+                r.coef = res.params[i]
+                r.stderr = res.bse[i]
+                r.tval = res.tvalues[i]
+                r.pval = res.pvalues[i]
+                rs.append(r)
+            return Rows(rs)
+        return res
+
+    def plot(self, cols=None):
+        cols = listify(cols) if cols else self[0].columns
+        scatter_matrix(self.isnum(*cols).df(cols))
+        plt.show()
+
+    def truncate(self, col, limit=0.01):
+        "Truncate extreme values, defalut 1 percent on both sides"
+        xs = self[col]
+        lower = np.percentile(xs, limit * 100)
+        higher = np.percentile(xs, (1 - limit) * 100)
+        self.rows = self.where(lambda r: r[col] >= lower and r[col] <= higher)\
+                        .rows
+        return self
+
+    def winsorize(self, col, limit=0.01):
+        xs = self[col]
+        lower = np.percentile(xs, limit * 100)
+        higher = np.percentile(xs, (1 - limit) * 100)
+        for r in self.rows:
+            if r[col] > higher:
+                r[col] = higher
+            elif r[col] < lower:
+                r[col] = lower
+        return self
+
+    # implicit ordering
+    def group(self, key):
+        # key can be a fn but not recommended
+        keyfn = _build_keyfn(key)
+        for _, rs in groupby(self.order(keyfn), keyfn):
+            yield self._newrows(list(rs))
+
+    # Use this when you need to see what's inside
+    # for example, when you want to see the distribution of data.
+    def df(self, cols=None):
+        if cols:
+            cols = listify(cols)
+            return pd.DataFrame([[r[col] for col in cols] for r in self.rows],
+                                columns=cols)
+        else:
+            cols = self.rows[0].columns
+            seq = _safe_values(self.rows, cols)
+            return pd.DataFrame(list(seq), columns=cols)
+
+    # Only for debugging
+    def show(self):
+        print(self.df())
+
+    # If Rows are preordered, it's possible to implement a faster version
+    # Should I? No, most of end users are clumsy including me.
+    # You may provide an option to let them assume the order of the rows
+    # but it makes matters complicated Just leave it as is
+    def pn(self, col, bps, pncol=None):
+        """"Assign portfolio number using the given breakpoints
+
+        No need to order Rows first
+        """
+        def loc(x, bps):
+            for i, b in enumerate(bps):
+                if x < b:
+                    return i + 1
+            return len(bps) + 1
+
+        if not pncol:
+            pncol = 'pn_' + col
+        self[pncol] = ''
+        for r in self.rows:
+            r[pncol] = loc(r[col], bps)
+        return self
+
+
+class SQLPlus:
+    def __init__(self, dbfile, cache_size, temp_store):
+        """
+        Args:
+            dbfile (str): db filename or ':memory:'
+        """
+        global WORKSPACE
+
+        # set workspace if it's not there
+        if not WORKSPACE:
+            if os.path.isabs(dbfile):
+                WORKSPACE = os.path.dirname(dbfile)
+            elif os.path.dirname(dbfile):
+                WORKSPACE = os.path.join(os.getcwd(), os.path.dirname())
+            else:
+                # default workspace
+                WORKSPACE = os.path.join(os.getcwd(), 'workspace')
+
+        if not os.path.exists(WORKSPACE):
+            os.makedirs(WORKSPACE)
+
+        if dbfile != ':memory:':
+            dbfile = os.path.join(WORKSPACE, os.path.basename(dbfile))
+
+        # you may want to pass sqlite3.deltypes or something like that
+        # but at this moment I think that will make matters worse
+        self.conn = sqlite3.connect(dbfile)
+
+        # row_factory is problematic don't use it
+        # you can avoid the problems but not worth it
+        # if you really need performance then just use "run"
+        self._cursor = self.conn.cursor()
+        # cursor for insertion only
+        self._insert_cursor = self.conn.cursor()
+
+        # some performance tuning
+        self._cursor.execute(f'PRAGMA cache_size={cache_size}')
+        self._cursor.execute('PRAGMA synchronous=OFF')
+        self._cursor.execute('PRAGMA count_changes=0')
+        # temp store at memory
+        self._cursor.execute(f'PRAGMA temp_store={temp_store}')
+        self._cursor.execute('PRAGMA journal_mode=OFF')
+
+        # load some user-defined functions from util.py, istext unnecessary
+        self.conn.create_function('isnum', -1, isnum)
+
+    def read(self, tname, cols=None, where=None,
+             order=None, group=None, roll=None):
+        """Generates a sequence of rows from a table.
+        """
+        # At most one among order, group and roll
+        if (1 if order else 0) + (1 if group else 0) + (1 if roll else 0) > 1:
+            raise ValueError("""At most one arg allowed
+                                among order, group and roll""")
+        # set implicit order
+        if group:
+            order = group
+        elif roll:
+            if isinstance(roll, dict):
+                # memorizing the order of four args wouldn't be easy
+                # You would see the doc anyway though.
+                size, step, dcol, nextfn = \
+                    roll['size'], roll['step'], roll['col'], roll['nextfn']
+            else:
+                size, step, dcol, nextfn = roll
+            order = dcol
+
+        qrows = self._cursor.execute(_build_query(tname, cols, where, order))
+        columns = [c[0] for c in qrows.description]
+        # there can't be duplicates in column names
+        if len(columns) != len(set(columns)):
+            raise ValueError('duplicates in columns names')
+
+        rows = _build_rows(qrows, columns)
+        if group:
+            for _, rs in groupby(rows, _build_keyfn(group)):
+                yield Rows(rs)
+        elif roll:
+            for ls in _roll(rows, size, step, _build_keyfn(dcol), nextfn):
+                yield Rows(ls)
+        else:
+            yield from rows
+
+    def insert(self, r, name, cols=None, pkeys=None):
+        # Using this method might be highly ineffient
+        # but hopefully, wouldn't matter much for most of the cases
+        cols = cols if cols else r.columns
+        n = len(cols)
+
+        # You can't use self.tables because it uses the main cursor
+        query = self._insert_cursor.execute("""
+        select * from sqlite_master
+        where type='table'
+        """)
+        if name.lower() not in (row[1] for row in query):
+            self._insert_cursor.execute(_create_statement(name, cols, pkeys))
+
+        istmt = _insert_statement(name, n)
+        self._insert_cursor.execute(istmt, r.values)
+
+    def write(self, seq, name, cols=None, pkeys=None):
+        """
+        """
+        def flatten(seq):
+            for x in seq:
+                try:
+                    yield from x
+                except:
+                    yield x
+
+        temp_name = 'table_' + random_string(10)
+        seq1 = (r for r in flatten(seq))
+
+        row0, seq2 = peek_first(seq1)
+        # if cols not specified row0 must be an instance of Row
+        cols = listify(cols) if cols else row0.columns
+        seq_values = _safe_values(seq2, cols) \
+            if isinstance(row0, Row) else seq2
+
+        try:
+            # you need temporary cursor.
+            tempcur = self.conn.cursor()
+            _sqlite3_save(tempcur, seq_values, temp_name, cols, pkeys)
+        finally:
+            self.rename(temp_name, name)
+            tempcur.close()
+
+    # register function to sql
+    def register(self, fn):
+        def newfn(*args):
+            try:
+                return fn(*args)
+            except:
+                return ''
+
+        args = []
+        for p in inspect.signature(fn).parameters.values():
+            if p.kind != p.VAR_POSITIONAL:
+                args.append(p)
+        n = len(args) if args else -1
+        self.conn.create_function(fn.__name__, n, newfn)
+
+    # register aggregate function to sql
+    def registerAgg(self, fn, cols=None):
+        clsname = 'Temp' + random_string()
+        d = {}
+        # It helps to write the function if you assign names to args
+        # Each name doesn't have to correspond with the actual column names
+        # of the table you may want to apply in.
+        if cols:
+            cols = listify(cols)
+
+            def step(self, *args):
+                r = Row()
+                # should I?
+                # assert len(cols) == len(args)
+                for a, b in zip(cols, args):
+                    r[a] = b
+                self.rows.append(r)
+            d['step'] = step
+
+            def finalize(self):
+                rs = AggBuilder.finalize(self)
+                try:
+                    return fn(Rows(rs))
+                except:
+                    return ''
+
+            d['finalize'] = finalize
+            self.conn.create_aggregate(fn.__name__, len(cols),
+                                       type(clsname, (AggBuilder,), d))
+        else:
+            def finalize(self):
+                rs = AggBuilder.finalize(self)
+                try:
+                    return fn(rs)
+                except:
+                    return ''
+            d['finalize'] = finalize
+            self.conn.create_aggregate(fn.__name__, -1,
+                                       type(clsname, (AggBuilder,), d))
+
+    def plot(self, tname, cols=None, where=None):
+        self.rows(tname, cols=cols, where=where).plot(cols)
+
+    @property
+    def tables(self):
+        "list[str]: column names"
+        query = self._cursor.execute("""
+        select * from sqlite_master
+        where type='table'
+        """)
+        # **.lower()
+        tables = [row[1].lower() for row in query]
+        return sorted(tables)
+
+    # args can be a list, a tuple or a dictionary
+    # It is unlikely that we need to worry about the security issues
+    # but still there's no harm. So...
+    def sql(self, query):
+        """Simply executes sql statement and update tables attribute
+
+        query: SQL query string
+        args: args for SQL query
+        """
+        return self._cursor.execute(query)
+
+    def rows(self, tname, cols=None, where=None, order=None):
+        return Rows(self.read(tname, cols, where, order))
+
+    def df(self, tname, cols=None, where=None, order=None):
+        return self.rows(tname, cols, where, order).df(cols)
+
+    def drop(self, tables):
+        " drop table if exists "
+        tables = listify(tables)
+        for table in tables:
+            # you can't use '?' for table name
+            # '?' is for data insertion
+            self.sql(f'drop table if exists {table}')
+
+    def rename(self, old, new):
+        if old.lower() in self.tables:
+            self.sql(f'drop table if exists { new }')
+            self.sql(f'alter table { old } rename to { new }')
+
+    def _cols(self, query):
+        return [c[0] for c in self.sql(query).description]
+
+    def _pkeys(self, tname):
+        "Primary keys in order"
+        pks = [r for r in self.sql(f'pragma table_info({tname})') if r[5]]
+        return [r[1] for r in sorted(pks, key=lambda r: r[5])]
+
+    def new(self, query, name=None, pkeys=None):
+        """Create new table from query(select statement)
+        """
+        temp_name = 'table_' + random_string()
+        tname = _get_name_from_query(query)
+        # keep pkeys from the original table if not exists
+        pkeys = listify(pkeys) if pkeys else self._pkeys(tname)
+        name = name or tname
+        try:
+            self.sql(_create_statement(temp_name, self._cols(query), pkeys))
+            self.sql(f'insert into {temp_name} {query}')
+            self.sql(f'drop table if exists { name }')
+            self.sql(f"alter table { temp_name } rename to { name }")
+        finally:
+            self.sql(f'drop table if exists { temp_name }')
+
+    def join(self, *tinfos, name=None, pkeys=None):
+        "simplified version of left join"
+        # if name is not given first table name#
+        # tinfo: [tname, cols, cols to match]
+        # ['sample', 'col1, col2 as colx', 'col3, col4']
+        # or
+        # ['sample', 'col1, col2 as colx',
+        # {'date': ymd(3, '%Y%m'), 'col4': None}]
+        def get_newcols(cols):
+            # extract new column names
+            # if there's any renaming
+            result = []
+            for c in listify(cols.lower()):
+                a, *b = [x.strip() for x in c.split('as')]
+                result.append(b[0] if b else a)
+            return result
+
+        # No name specified, then the first table name is the output table name
+        name = name or tinfos[0][0]
+        # rewrite tinfos if there's missing matching columns
+        mcols0 = tinfos[0][2]
+
+        # validity check, what if mcols is a list of more than 1 element?
+        for x in tinfos:
+            assert len(x) == 2 or len(x) == 3, f"Invalid Arg: {x}"
+        tinfos = [[tname, cols, mcols[0] if mcols else mcols0]
+                  for tname, cols, *mcols in tinfos]
+
+        # Validity checks
+        all_newcols = []
+        # number of matching columns for each given table
+        mcols_sizes = []
+        for _, cols, mcols in tinfos:
+            all_newcols += get_newcols(cols)
+            mcols_sizes.append(len(listify(mcols)))
+
+        assert len(all_newcols) == len(set(all_newcols)), "Column duplicates"
+        assert len(set(mcols_sizes)) == 1,\
+            "Matching columns must have the same sizes"
+
+        try:
+            tcols = []
+            # write new temporary tables for performance
+            for tname, cols, mcols in tinfos:
+                if isinstance(mcols, dict):
+                    temp_tname = 'table_' + random_string()
+
+                    def build_fn(mcols):
+                        def fn(r):
+                            for c, f in mcols.items():
+                                if f:
+                                    r[c] = f(r[c])
+                            return r
+                        return fn
+                    fn1 = build_fn(mcols)
+                    temp_seq = (fn1(r) for r in self.read(tname))
+                    self.write(temp_seq, temp_tname, pkeys=list(mcols))
+                else:
+                    temp_tname = tname
+                newcols = [temp_tname + '.' + c for c in listify(cols)]
+                tcols.append((temp_tname, newcols, listify(mcols)))
+
+            tname0, _, mcols0 = tcols[0]
+            join_clauses = []
+            for tname1, _, mcols1 in tcols[1:]:
+                eqs = []
+                for c0, c1 in zip(mcols0, mcols1):
+                    if c1:
+                        eqs.append(f'{tname0}.{c0} = {tname1}.{c1}')
+                join_clauses.append(f"""
+                left join {tname1}
+                on {' and '.join(eqs)}
+                """)
+            jcs = ' '.join(join_clauses)
+            allcols = ', '.join(c for _, cols, _ in tcols for c in cols)
+            query = f"select {allcols} from {tname0} {jcs}"
+            self.new(query, name, pkeys)
+        finally:
+            # drop temporary tables
+            for (t0, _, _), (t1, _, _) in zip(tinfos, tcols):
+                if t0 != t1:
+                    self.drop(t1)
+
+
+def _safe_values(rows, cols):
+    "assert all rows have cols"
+    for r in rows:
+        assert r.columns == cols, str(r)
+        yield r.values
+
+
+def _pick(cols, seq):
+    " pick only cols for a seq, similar to sql select "
+    cols = listify(cols)
+    for r in seq:
+        r1 = Row()
+        for c in cols:
+            r1[c] = r[c]
+        yield r1
+
+
+def _build_keyfn(key):
+    " if key is a string return a key function "
+    # if the key is already a function, just return it
+    if hasattr(key, '__call__'):
+        return key
+    colnames = listify(key)
+    if len(colnames) == 1:
+        col = colnames[0]
+        return lambda r: r[col]
+    else:
+        return lambda r: [r[colname] for colname in colnames]
+
+
+def _create_statement(name, colnames, pkeys):
+    """create table if not exists foo (...)
+
+    Note:
+        Every type is numeric.
+        Table name and column names are all lower cased
+    """
+    pkeys = [f"primary key ({', '.join(listify(pkeys))})"] if pkeys else []
+    # every col is numeric, this may not be so elegant but simple to handle.
+    # If you want to change this, Think again
+    schema = ', '.join([col.lower() + ' ' + 'numeric' for col in colnames] +
+                       pkeys)
+    return "create table if not exists %s (%s)" % (name.lower(), schema)
+
+
+def _insert_statement(name, ncol):
+    """insert into foo values (?, ?, ?, ...)
+    Note:
+        Column name is lower cased
+
+    ncol : number of columns
+    """
+    qmarks = ', '.join(['?'] * ncol)
+    return "insert into %s values (%s)" % (name.lower(), qmarks)
+
+
+def _build_query(tname, cols=None, where=None, order=None):
+    "Build select statement"
+    cols = ', '.join(listify(cols)) if cols else '*'
+    where = 'where ' + where if where else ''
+    order = 'order by ' + ', '.join(listify(order)) if order else ''
+    return f'select {cols} from {tname} {where} {order}'
+
+
+def _sqlite3_save(cursor, srows, table_name, column_names, pkeys):
+    "saves sqlite3.Row instances to db"
+    cursor.execute(_create_statement(table_name, column_names, pkeys))
+    istmt = _insert_statement(table_name, len(column_names))
+    try:
+        cursor.executemany(istmt, srows)
+    except:
+        raise Exception("Trying to insert invaid Values to DB")
+
+
+# sequence row values to rows
+def _build_rows(seq_values, cols):
+    "build rows from an iterator of values"
+    for vals in seq_values:
+        r = Row()
+        for col, val in zip(cols, vals):
+            r[col] = val
+        yield r
+
+
+def _get_name_from_query(query):
+    """'select * from foo where ...' => foo
+    """
+    pat = re.compile(r'\s+from\s+(\w+)\s*')
+    try:
+        return pat.search(query.lower()).group(1)
+    except:
+        return None
+
+
+def _roll(seq, period, jump, keyfn, nextfn):
+    """generates chunks of seq for rollover tasks.
+    seq is assumed to be ordered
+    """
+    def chunk(seq):
+        fst, seq1 = peek_first(seq)
+        k0 = keyfn(fst)
+        for k1, sq in groupby(seq1, keyfn):
+            if k0 == k1:
+                k0 = nextfn(k1)
+                # you must realize them first
+                yield list(sq)
+            else:
+                # some missings
+                while k0 < k1:
+                    k0 = nextfn(k0)
+                    yield []
+                k0 = nextfn(k1)
+                # you must realize them first
+                yield list(sq)
+
+    gss = tee(chunk(seq), period)
+    for i, gs in enumerate(gss):
+        # consume
+        for i1 in range(i):
+            next(gs)
+
+    for xs in islice(zip_longest(*gss, fillvalue=None), 0, None, jump):
+        # this might be a bit inefficient for some cases
+        # but this is convenient, let's just go easy,
+        # not making mistakes is much more important
+        result = list(chain(*(x for x in xs if x)))
+        if len(result) > 0:
+            yield result
+
