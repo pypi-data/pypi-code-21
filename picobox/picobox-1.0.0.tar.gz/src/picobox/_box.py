@@ -1,0 +1,187 @@
+"""Box container."""
+
+import functools
+import inspect
+import threading
+
+from . import _scopes
+
+
+# Missing is a special sentinel object that's used to indicate a value is
+# missing when "None" is a valid input. It's important to define a human
+# readable "__repr__" because its value is used in function signatures in
+# API reference (see docs).
+class _missing:
+    def __repr__(self):
+        return '<optional>'
+
+
+_missing = _missing()
+
+
+class Box(object):
+    """Box is a dependency injection (DI) container.
+
+    DI container is an object that contains any amount of factories, one for
+    each dependency apart. Dependency, on the other hand, is an ordinary
+    instance or value the container needs to provide on demand.
+
+    Thanks to scopes, the class keeps track of produced dependencies and knows
+    exactly when to reuse them or when to create new ones. That is to say each
+    scope defines a set of rules for when to reuse dependencies.
+
+    Here's a minimal example of how Box instance can be used::
+
+        import picobox
+
+        box = picobox.Box()
+        box.put('magic', 42)
+
+        @box.pass_('magic')
+        def do(magic):
+            return magic + 1
+
+        assert box.get('magic') == 42
+        assert do(13) == 14
+        assert do() == 43
+    """
+
+    def __init__(self):
+        self._store = {}
+        self._scope_instances = {}
+        self._lock = threading.RLock()
+
+    def put(self, key, value=_missing, factory=_missing, scope=_missing):
+        """Define a dependency (aka service) within the box instance.
+
+        A dependency can be expressed either directly, by passing a concrete
+        `value`, or via `factory` function. A `factory` may be accompanied by
+        `scope` that defines a set of rules for when to create a new dependency
+        instance and when to reuse existing one. If `scope` is not passed, no
+        scope is assumed which means produce a new instance each time it's
+        requested.
+
+        :param key: A key under which to put a dependency. Can be any hashable
+            object, but string is recommended.
+        :param value: A dependency to be stored within a box under `key` key.
+            Can be any object. A syntax sugar for ``factory=lambda: value``.
+        :param factory: A factory function to produce a dependency when needed.
+            Must be callable with no arguments.
+        :param scope: A scope to keep track of produced dependencies. Must be
+            a class that implements :class:`Scope` interface.
+        :raises ValueError: If both `value` and `factory` are passed.
+        """
+        if value is not _missing \
+                and (factory is not _missing or scope is not _missing):
+            raise ValueError(
+                "either 'value' or 'factory'/'scope' pair must be passed")
+
+        # Value is a syntax sugar Box supports to store objects "As Is"
+        # with singleton scope. In other words it's essentially the same
+        # as one pass "factory=lambda: value". Alternatively, Box could
+        # have just one factory argument and check it for callable, but
+        # in this case it wouldn't support values which are callable by
+        # its nature.
+        if value is not _missing:
+            def factory():
+                return value
+            scope = _scopes.singleton
+
+        # If scope is not explicitly passed, Box assumes "No Scope"
+        # scope which means each time someone asks a box to retrieve a
+        # value it would use a factory function.
+        elif scope is _missing:
+            scope = _scopes.noscope
+
+        # Convert a given scope class into a scope instance. Since key
+        # is uniquely defined among all scopes within the same box, it's
+        # safe to reuse already created scope instance in order to avoid
+        # memory consumption when a lot of objects with the same scope
+        # are put into a box.
+        try:
+            scope = self._scope_instances[scope]
+        except KeyError:
+            scope = self._scope_instances.setdefault(scope, scope())
+
+        # Despite "dict" is thread-safe in CPython (due to GIL), it's not
+        # guaranteed by the language itself and may not be the case among
+        # alternative implementations.
+        with self._lock:
+            self._store[key] = (scope, factory)
+
+    def get(self, key, default=_missing):
+        """Retrieve a dependency (aka service) out of the box instance.
+
+        The process involves creation of requested dependency by calling an
+        associated `factory` function, and then returning result back to the
+        caller code. If a dependency is `scoped`, there's a chance for an
+        existing instance to be returned instead.
+
+        :param key: A key to retrieve a dependency. Must be the one used when
+            calling :meth:`.put` method.
+        :param default: (optional) A fallback value to be returned if there's
+            no `key` in the box. If not passed, `KeyError` is raised.
+        :raises KeyError: If no dependencies saved under `key` in the box.
+        """
+        # If nothing was put into a box under "key", Box follows mapping
+        # interface and raises KeyError, unless some default value has been
+        # passed as the fallback value.
+        try:
+            scope, factory = self._store[key]
+        except KeyError:
+            if default is _missing:
+                raise
+            return default
+
+        # If something was put into a box under "key", Box tries to retrieve a
+        # value. If it does not exist for current execution context, Box uses a
+        # factory function to create one. For implementation details below
+        # please refer to double-checked locking design pattern.
+        try:
+            value = scope.get(key)
+        except KeyError:
+            with self._lock:
+                try:
+                    value = scope.get(key)
+                except KeyError:
+                    value = factory()
+                    scope.set(key, value)
+
+        return value
+
+    def pass_(self, key, as_=_missing):
+        """Pass a dependency to a function if nothing explicitly passed.
+
+        The decorator implements late binding which means it does not require
+        to have a dependency instance in the box before applying. The instance
+        will be looked up when a decorated function is called. Other important
+        property is that it doesn't change a signature of decorated function
+        preserving a way to explicitly pass arguments ignoring injections.
+
+        :param key: A key to retrieve a dependency. Must be the one used when
+            calling :meth:`.put` method.
+        :parameter as\_: (optional) Bind a dependency associated with `key` to
+            a function argument named `as_`. If not passed, the same as `key`.
+        :raises KeyError: If no dependencies saved under `key` in the box.
+        """
+        def decorator(fn):
+            @functools.wraps(fn)
+            def wrapper(*args, **kwargs):
+                nonlocal as_
+
+                if as_ is _missing:
+                    as_ = key
+
+                signature = inspect.signature(fn)
+                arguments = signature.bind_partial(*args, **kwargs)
+
+                # Box supplies an argument if and only if the argument wasn't
+                # supplied explicitly by caller code. This is intended behavior
+                # and a rationale behind is to preserve compatibility with
+                # usual function call.
+                if as_ not in arguments.arguments:
+                    kwargs[as_] = self.get(key)
+
+                return fn(*args, **kwargs)
+            return wrapper
+        return decorator
