@@ -1,0 +1,97 @@
+# -*- coding: utf-8 -*-
+
+# Form implementation generated from reading ui file 'toktokkie/ui/qt/qt_designer/base_config.ui'
+#
+# Created by: PyQt5 UI code generator 5.8.2
+#
+# WARNING! All changes made in this file will be lost!
+
+from __future__ import absolute_import
+from PyQt5 import QtCore, QtGui, QtWidgets
+
+class Ui_BaseConfig(object):
+    def setupUi(self, BaseConfig):
+        BaseConfig.setObjectName(u"BaseConfig")
+        BaseConfig.resize(808, 612)
+        self.gridLayout = QtWidgets.QGridLayout(BaseConfig)
+        self.gridLayout.setObjectName(u"gridLayout")
+        spacerItem = QtWidgets.QSpacerItem(20, 40, QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Expanding)
+        self.gridLayout.addItem(spacerItem, 4, 0, 1, 1)
+        self.folder_icon_label = QtWidgets.QLabel(BaseConfig)
+        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Preferred)
+        sizePolicy.setHorizontalStretch(0)
+        sizePolicy.setVerticalStretch(0)
+        sizePolicy.setHeightForWidth(self.folder_icon_label.sizePolicy().hasHeightForWidth())
+        self.folder_icon_label.setSizePolicy(sizePolicy)
+        self.folder_icon_label.setMaximumSize(QtCore.QSize(512, 512))
+        self.folder_icon_label.setText(u"")
+        self.folder_icon_label.setPixmap(QtGui.QPixmap(u"../../../../../../../Downloads/pokemon_folder_icon_by_mikromike-d8mldi8.png"))
+        self.folder_icon_label.setScaledContents(True)
+        self.folder_icon_label.setAlignment(QtCore.Qt.AlignCenter)
+        self.folder_icon_label.setObjectName(u"folder_icon_label")
+        self.gridLayout.addWidget(self.folder_icon_label, 3, 0, 1, 1)
+        spacerItem1 = QtWidgets.QSpacerItem(20, 40, QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Expanding)
+        self.gridLayout.addItem(spacerItem1, 2, 0, 1, 1)
+        self.series_name_edit = QtWidgets.QLineEdit(BaseConfig)
+        self.series_name_edit.setEnabled(True)
+        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Fixed)
+        sizePolicy.setHorizontalStretch(0)
+        sizePolicy.setVerticalStretch(0)
+        sizePolicy.setHeightForWidth(self.series_name_edit.sizePolicy().hasHeightForWidth())
+        self.series_name_edit.setSizePolicy(sizePolicy)
+        self.series_name_edit.setMinimumSize(QtCore.QSize(134, 0))
+        self.series_name_edit.setFrame(False)
+        self.series_name_edit.setAlignment(QtCore.Qt.AlignCenter)
+        self.series_name_edit.setObjectName(u"series_name_edit")
+        self.gridLayout.addWidget(self.series_name_edit, 1, 0, 1, 1)
+        self.open_directory_button = QtWidgets.QPushButton(BaseConfig)
+        self.open_directory_button.setObjectName(u"open_directory_button")
+        self.gridLayout.addWidget(self.open_directory_button, 5, 0, 1, 1)
+        self.frame = QtWidgets.QFrame(BaseConfig)
+        self.frame.setEnabled(True)
+        self.frame.setMaximumSize(QtCore.QSize(500, 16777215))
+        self.frame.setFrameShape(QtWidgets.QFrame.Box)
+        self.frame.setFrameShadow(QtWidgets.QFrame.Raised)
+        self.frame.setObjectName(u"frame")
+        self.gridLayout_2 = QtWidgets.QGridLayout(self.frame)
+        self.gridLayout_2.setObjectName(u"gridLayout_2")
+        self.media_type_combo_box = QtWidgets.QComboBox(self.frame)
+        self.media_type_combo_box.setObjectName(u"media_type_combo_box")
+        self.gridLayout_2.addWidget(self.media_type_combo_box, 0, 1, 1, 2)
+        self.tags_edit = QtWidgets.QLineEdit(self.frame)
+        self.tags_edit.setText(u"")
+        self.tags_edit.setObjectName(u"tags_edit")
+        self.gridLayout_2.addWidget(self.tags_edit, 1, 1, 1, 2)
+        self.label_3 = QtWidgets.QLabel(self.frame)
+        self.label_3.setFrameShape(QtWidgets.QFrame.Box)
+        self.label_3.setAlignment(QtCore.Qt.AlignCenter)
+        self.label_3.setObjectName(u"label_3")
+        self.gridLayout_2.addWidget(self.label_3, 1, 0, 1, 1)
+        spacerItem2 = QtWidgets.QSpacerItem(20, 40, QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Expanding)
+        self.gridLayout_2.addItem(spacerItem2, 2, 0, 1, 1)
+        self.confirm_changes_button = QtWidgets.QPushButton(self.frame)
+        self.confirm_changes_button.setObjectName(u"confirm_changes_button")
+        self.gridLayout_2.addWidget(self.confirm_changes_button, 3, 1, 1, 1)
+        self.label_4 = QtWidgets.QLabel(self.frame)
+        self.label_4.setFrameShape(QtWidgets.QFrame.Box)
+        self.label_4.setAlignment(QtCore.Qt.AlignCenter)
+        self.label_4.setObjectName(u"label_4")
+        self.gridLayout_2.addWidget(self.label_4, 0, 0, 1, 1)
+        self.gridLayout.addWidget(self.frame, 0, 1, 7, 1)
+
+        self.retranslateUi(BaseConfig)
+        QtCore.QMetaObject.connectSlotsByName(BaseConfig)
+        BaseConfig.setTabOrder(self.series_name_edit, self.media_type_combo_box)
+        BaseConfig.setTabOrder(self.media_type_combo_box, self.tags_edit)
+        BaseConfig.setTabOrder(self.tags_edit, self.confirm_changes_button)
+        BaseConfig.setTabOrder(self.confirm_changes_button, self.open_directory_button)
+
+    def retranslateUi(self, BaseConfig):
+        _translate = QtCore.QCoreApplication.translate
+        BaseConfig.setWindowTitle(_translate(u"BaseConfig", u"Form"))
+        self.series_name_edit.setText(_translate(u"BaseConfig", u"Series Name"))
+        self.open_directory_button.setText(_translate(u"BaseConfig", u"Open Directory"))
+        self.label_3.setText(_translate(u"BaseConfig", u"Tags"))
+        self.confirm_changes_button.setText(_translate(u"BaseConfig", u"Confirm Changes"))
+        self.label_4.setText(_translate(u"BaseConfig", u"Media Type"))
+
