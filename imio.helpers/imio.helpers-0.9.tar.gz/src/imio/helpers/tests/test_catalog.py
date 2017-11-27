@@ -1,0 +1,177 @@
+# -*- coding: utf-8 -*-
+
+from plone import api
+
+from imio.helpers.testing import IntegrationTestCase
+from imio.helpers.catalog import addOrUpdateIndexes
+from imio.helpers.catalog import addOrUpdateColumns
+from imio.helpers.catalog import get_intid
+from imio.helpers.catalog import removeIndexes
+from imio.helpers.catalog import removeColumns
+from imio.helpers.catalog import ZCTextIndexInfo
+from plone.app.testing import applyProfile
+from zope.component import getUtility
+from zope.intid.interfaces import IIntIds
+
+
+class TestCatalogModule(IntegrationTestCase):
+    """
+    Test all helper methods of catalog module.
+    """
+
+    def test_addOrUpdateIndexes(self):
+        """
+        Normal usecase of addOrUpdateIndexes, this will add a new index of required type.
+        Moreover existing objects will be updated.
+        """
+        # for now reversedUID index does not exist...
+        self.assertTrue('reversedUID' not in self.catalog.indexes())
+        # add a document prior to adding the index
+        priorDocument = api.content.create(type='Document',
+                                           id='prior-document',
+                                           container=self.portal)
+        addOrUpdateIndexes(self.portal, {'reversedUID': ('FieldIndex', {})})
+        self.assertTrue('reversedUID' in self.portal.portal_catalog.indexes())
+        # moreover existing objects were updated
+        brains = self.catalog(reversedUID=priorDocument.UID()[::-1])
+        self.assertTrue(len(brains) == 1)
+        self.assertTrue(brains[0].getObject().UID() == priorDocument.UID())
+
+    def test_updateIndexType(self):
+        """
+        If an index already exists with a given type, it can be updated
+        to another given type.  Add an index of type 'FieldIndex' then
+        turn it into a 'KeywordIndex'.
+        """
+        addOrUpdateIndexes(self.portal, {'reversedUID': ('FieldIndex', {})})
+        # the added index type is 'FieldIndex'
+        self.assertTrue(self.catalog._catalog.indexes['reversedUID'].meta_type == 'FieldIndex')
+        # now add it as a KeyWordIndex
+        addOrUpdateIndexes(self.portal, {'reversedUID': ('KeywordIndex', {})})
+        self.assertTrue(self.catalog._catalog.indexes['reversedUID'].meta_type == 'KeywordIndex')
+
+    def test_addOrUpdateColumnsWithExistingIndex(self):
+        """
+        Normal usecase of addOrUpdateColumns, this will add a new column (metadata).
+        Test here when a corresponding index exists.
+        Moreover existing objects will be updated.
+        """
+        # for now reversedUID metadata does not exist...
+        self.assertTrue('reversedUID' not in self.catalog.schema())
+        # add a document prior to adding the index
+        api.content.create(type='Document',
+                           id='prior-document',
+                           container=self.portal)
+        addOrUpdateIndexes(self.portal, {'reversedUID': ('FieldIndex', {})})
+        addOrUpdateColumns(self.portal, ('reversedUID', ))
+        # the metadata was actually added
+        self.assertTrue('reversedUID' in self.catalog.schema())
+        # and existing objects were updated
+        brains = self.catalog()
+        for brain in brains:
+            obj = brain.getObject()
+            self.assertTrue(obj.UID()[::-1] == brain.reversedUID)
+
+    def test_addOrUpdateColumnsWithoutExistingIndex(self):
+        """
+        Usecase of addOrUpdateColumns, this will add a new column (metadata).
+        Test here when a no corresponding index exists.
+        Moreover existing objects will be updated.
+        """
+        # for now reversedUID metadata does not exist...
+        self.assertTrue('reversedUID' not in self.catalog.schema())
+        # add a document prior to adding the index
+        api.content.create(type='Document',
+                           id='prior-document',
+                           container=self.portal)
+        addOrUpdateColumns(self.portal, ('reversedUID', ))
+        # no corresponding index exists
+        self.assertTrue('reversedUID' not in self.catalog.indexes())
+        # the metadata was actually added
+        self.assertTrue('reversedUID' in self.catalog.schema())
+        # and existing objects were updated
+        brains = self.catalog()
+        for brain in brains:
+            obj = brain.getObject()
+            self.assertTrue(obj.UID()[::-1] == brain.reversedUID)
+
+    def test_addOrUpdateColumnsUnexistingUid(self):
+        """
+        In case we update the catalog and an uid is still in catalog but object
+        does not exist anymore, it does not fail and simply print a message
+        in the Zope log.
+        """
+        # insert an unexisting uid and addOrUpdateColumns
+        catalog = self.portal.portal_catalog
+        catalog._catalog.uids.insert('/plone/unknown', 123456789)
+        self.assertTrue('/plone/unknown' in catalog._catalog.uids.keys())
+        addOrUpdateColumns(self.portal, ('new_metadata', ))
+        self.assertIsNone(addOrUpdateColumns(self.portal, ('Title', )))
+
+    def test_addOrUpdateZCTextIndex(self):
+        """
+        While adding a ZCTextIndex, optional 'extra' record can be passed.
+        If nothing available, default values are used.
+        """
+        addOrUpdateIndexes(self.portal, {'sample_zctextindex': ('ZCTextIndex', {})})
+        index = self.catalog._catalog.indexes['sample_zctextindex']
+        # if no 'extra' record given, default values are used
+        self.assertTrue(index.lexicon_id == ZCTextIndexInfo.lexicon_id)
+        self.assertTrue(index._index_type == ZCTextIndexInfo.index_type)
+        # we can also update an existing ZCTextIndex index
+        indexInfos = ZCTextIndexInfo()
+        indexInfos.lexicon_id = 'plaintext_lexicon'
+        indexInfos.index_type = 'Cosine Measure'
+        addOrUpdateIndexes(self.portal, {'sample_zctextindex': ('ZCTextIndex', indexInfos)})
+        index = self.catalog._catalog.indexes['sample_zctextindex']
+        self.assertTrue(index.lexicon_id == indexInfos.lexicon_id)
+        self.assertTrue(index._index_type == indexInfos.index_type)
+        # we can change the indexType
+        addOrUpdateIndexes(self.portal, {'sample_zctextindex': ('FieldIndex', {})})
+        self.assertTrue(self.catalog._catalog.indexes['sample_zctextindex'].meta_type == 'FieldIndex')
+        # and back to a ZCTextIndex
+        addOrUpdateIndexes(self.portal, {'sample_zctextindex': ('ZCTextIndex', {})})
+        self.assertTrue(self.catalog._catalog.indexes['sample_zctextindex'].meta_type == 'ZCTextIndex')
+
+    def test_removeIndexes(self):
+        """
+        Normal usecase of removeIndexes, this will remove given indexes
+        and will not fail even if the index does not exist.
+        """
+        # remove an existing index, it will only remove the index, not column if also exists
+        self.assertTrue('Description' in self.catalog.indexes())
+        self.assertTrue('Description' in self.catalog.schema())
+        removeIndexes(self.portal, indexes=('Description', ))
+        self.assertTrue('Description' not in self.catalog.indexes())
+        # the metadata with same name still exists
+        self.assertTrue('Description' in self.catalog.schema())
+        # if we try to remove an unexisting index, it does not fail
+        removeIndexes(self.portal, indexes=('Description', ))
+
+    def test_removeColumns(self):
+        """
+        Normal usecase of removeColumns, this will remove given colmuns
+        and will not fail even if the column does not exist.
+        """
+        # remove an existing column, it will only remove the column, not the index if also exists
+        self.assertTrue('Description' in self.catalog.schema())
+        self.assertTrue('Description' in self.catalog.indexes())
+        removeColumns(self.portal, columns=('Description', ))
+        self.assertTrue('Description' not in self.catalog.schema())
+        # the index with same name still exists
+        self.assertTrue('Description' in self.catalog.indexes())
+        # if we try to remove an unexisting column, it does not fail
+        removeColumns(self.portal, columns=('Description', ))
+
+    def test_get_intid(self):
+        obj = api.content.create(container=self.portal.folder, id='tt', type='testingtype')
+        applyProfile(self.portal, 'plone.app.intid:default')
+        intids = getUtility(IIntIds)
+        obj_id = intids.getId(obj)
+        self.assertEqual(get_intid(obj), obj_id)
+        self.assertEqual(get_intid(obj, intids=intids), obj_id)
+        intids.unregister(obj)
+        self.assertEqual(get_intid(obj, intids=intids, create=False), 1)
+        new_id = get_intid(obj, intids=intids)
+        self.assertNotEqual(new_id, obj_id)
+        self.assertNotEqual(new_id, 1)
