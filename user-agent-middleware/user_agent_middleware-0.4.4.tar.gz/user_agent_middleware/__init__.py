@@ -1,0 +1,6 @@
+default_app_config = 'user_agent_middleware.apps.UserAgentMiddlewareConfig'
+__name__ = 'user_agent_middleware'
+__author__ = 'Matthew Stuart'
+__version__ = '0.4.4'
+__author_email__ = 'matthew.stuart@double-eye.com'
+__description__ = 'Django User Agent is a tracker for visitors on the website through the API'
