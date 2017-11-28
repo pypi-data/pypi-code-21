@@ -1,0 +1,2 @@
+class FetchNotCalled(Exception):
+    pass
