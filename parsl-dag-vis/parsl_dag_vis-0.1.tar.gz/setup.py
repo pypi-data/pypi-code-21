@@ -1,0 +1,21 @@
+from distutils.core import setup
+
+setup(
+    name='parsl_dag_vis',
+    packages=['dag_vis'],
+    version='0.1',  # Ideally should be same as your GitHub release tag varsion
+    description='DAG visualization code to be run from Jupyter notebooks to visualize data flow dependency graphs of workflows',
+    author='Ben Glick',
+    author_email='glick@lclark.edu',
+    url='https://github.com/benhg/parsl-dag-vis',
+    download_url='https://github.com/benhg/parsl-dag-vis/archive/v0.1-alpha.zip',
+    keywords=['parsl', 'jupyter', 'visualization'],
+    install_requires=[
+        'parsl',
+        'jupyter',
+        'ipython'
+    ],
+    classifiers=['Development Status :: 3 - Alpha',
+                 'License :: OSI Approved :: MIT License',
+                 'Programming Language :: Python :: 3.6', ],
+)
