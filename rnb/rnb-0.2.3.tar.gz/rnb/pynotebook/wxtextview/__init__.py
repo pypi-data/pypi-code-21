@@ -1,0 +1,1 @@
+from .wxtextview import WXTextView
