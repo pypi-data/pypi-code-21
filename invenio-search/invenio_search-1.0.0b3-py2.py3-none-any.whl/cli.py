@@ -1,0 +1,177 @@
+# -*- coding: utf-8 -*-
+#
+# This file is part of Invenio.
+# Copyright (C) 2015, 2016, 2017 CERN.
+#
+# Invenio is free software; you can redistribute it
+# and/or modify it under the terms of the GNU General Public License as
+# published by the Free Software Foundation; either version 2 of the
+# License, or (at your option) any later version.
+#
+# Invenio is distributed in the hope that it will be
+# useful, but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+# General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with Invenio; if not, write to the
+# Free Software Foundation, Inc., 59 Temple Place, Suite 330, Boston,
+# MA 02111-1307, USA.
+#
+# In applying this license, CERN does not
+# waive the privileges and immunities granted to it by virtue of its status
+# as an Intergovernmental Organization or submit itself to any jurisdiction.
+
+"""Click command-line interface for managing search indexes."""
+
+from __future__ import absolute_import, print_function
+
+import json
+import pprint
+import sys
+
+import click
+from flask.cli import with_appcontext
+
+from .proxies import current_search, current_search_client
+
+
+def abort_if_false(ctx, param, value):
+    """Abort command if value is False."""
+    if not value:
+        ctx.abort()
+
+
+#
+# Index management commands
+#
+@click.group()
+def index():
+    """Manage search indices."""
+
+
+@index.command()
+@click.option('--force', is_flag=True, default=False)
+@with_appcontext
+def init(force):
+    """Initialize registered aliases and mappings."""
+    click.secho('Creating indexes...', fg='green', bold=True, file=sys.stderr)
+    with click.progressbar(
+            current_search.create(ignore=[400] if force else None),
+            length=current_search.number_of_indexes) as bar:
+        for name, response in bar:
+            bar.label = name
+    click.secho('Putting templates...', fg='green', bold=True, file=sys.stderr)
+    with click.progressbar(
+            current_search.put_templates(ignore=[400] if force else None),
+            length=len(current_search.templates.keys())) as bar:
+        for response in bar:
+            bar.label = response
+
+
+@index.command()
+@click.option('--yes-i-know', is_flag=True, callback=abort_if_false,
+              expose_value=False,
+              prompt='Do you know that you are going to destroy all indexes?')
+@click.option('--force', is_flag=True, default=False)
+@with_appcontext
+def destroy(force):
+    """Destroy all indexes."""
+    click.secho('Destroying indexes...', fg='red', bold=True, file=sys.stderr)
+    with click.progressbar(
+            current_search.delete(ignore=[400, 404] if force else None),
+            length=current_search.number_of_indexes) as bar:
+        for name, response in bar:
+            bar.label = name
+
+
+@index.command()
+@click.argument('index_name')
+@click.option('-b', '--body', type=click.File('r'), default=sys.stdin)
+@click.option('--force', is_flag=True, default=False)
+@click.option('--verbose', is_flag=True, default=False)
+@with_appcontext
+def create(index_name, body, force, verbose):
+    """Create a new index."""
+    result = current_search_client.indices.create(
+        index=index_name,
+        body=json.load(body),
+        ignore=[400] if force else None,
+    )
+    if verbose:
+        click.echo(json.dumps(result))
+
+
+@index.command('list')
+@click.option('-a', '--only-active', is_flag=True, default=False)
+@click.option('--only-aliases', is_flag=True, default=False)
+@click.option('--verbose', is_flag=True, default=False)
+@with_appcontext
+def list_cmd(only_active, only_aliases, verbose):
+    """List indices."""
+    def _tree_print(d, rec_list=None, verbose=False):
+        # Note that on every recursion rec_list is copied,
+        # which might not be very effective for very deep dictionaries.
+        rec_list = rec_list or []
+        for idx, key in enumerate(sorted(d)):
+            line = ['│  ' if i == 1 else '   ' for i in rec_list]
+            line.append('├──')
+            click.echo(''.join(line), nl=False)
+            if isinstance(d[key], dict):
+                click.echo(key)
+                new_rec_list = rec_list + [0 if len(d) == (idx - 1) else 1]
+                _tree_print(d[key], new_rec_list, verbose)
+            else:
+                leaf_txt = '{} -> {}'.format(key, d[key]) if verbose else key
+                click.echo(leaf_txt)
+
+    aliases = (current_search.active_aliases
+               if only_active else current_search.aliases)
+    active_aliases = current_search.active_aliases
+
+    if only_aliases:
+        click.echo(json.dumps(list((aliases.keys())), indent=4))
+    else:
+        # Mark active indices for printout
+        aliases = {(k + (' *' if k in active_aliases else '')): v
+                   for k, v in aliases.items()}
+        click.echo(_tree_print(aliases, verbose=verbose))
+
+
+@index.command()
+@click.argument('index_name')
+@click.option('--force', is_flag=True, default=False)
+@click.option('--verbose', is_flag=True, default=False)
+@click.option('--yes-i-know', is_flag=True, callback=abort_if_false,
+              expose_value=False,
+              prompt='Do you know that you are going to delete the index?')
+@with_appcontext
+def delete(index_name, force, verbose):
+    """Delete index by its name."""
+    result = current_search_client.indices.delete(
+        index=index_name,
+        ignore=[400, 404] if force else None,
+    )
+    if verbose:
+        click.echo(json.dumps(result))
+
+
+@index.command()
+@click.argument('index_name')
+@click.argument('doc_type')
+@click.option('-i', '--identifier', default=None)
+@click.option('-b', '--body', type=click.File('r'), default=sys.stdin)
+@click.option('--force', is_flag=True, default=False)
+@click.option('--verbose', is_flag=True, default=False)
+@with_appcontext
+def put(index_name, doc_type, identifier, body, force, verbose):
+    """Index input data."""
+    result = current_search_client.index(
+        index=index_name,
+        doc_type=doc_type or index_name,
+        id=identifier,
+        body=json.load(body),
+        op_type='index' if force or identifier is None else 'create',
+    )
+    if verbose:
+        click.echo(json.dumps(result))
