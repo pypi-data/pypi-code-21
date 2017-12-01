@@ -1,0 +1,231 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
+"""
+.. codeauthor:: Cédric Dumay <cedric.dumay@gmail.com>
+
+
+"""
+import logging
+
+from cdumay_rest_client.exceptions import ValidationError
+from cdumay_result import Result
+from kser_operation.task import Task
+
+logger = logging.getLogger(__name__)
+
+
+class Operation(Task):
+    TASKS = ()
+
+    def check_required_params(self):
+        """ Check if all required parameters are set"""
+        for child in self.TASKS:
+            for param in child.REQUIRED_FIELDS:
+                if param not in self.params:
+                    raise ValidationError(
+                        "Missing parameter: {} for {}".format(param, child.path)
+                    )
+
+    @classmethod
+    def new(cls, **kwargs):
+        return cls(**cls.parse_inputs(**kwargs))
+
+    @classmethod
+    def parse_inputs(cls, **kwargs):
+        return kwargs
+
+    def __init__(self, uuid=None, status="PENDING", params=None, tasks=None,
+                 result=None):
+        Task.__init__(self, uuid=uuid, params=params, status=status,
+                      result=result)
+        self.tasks = tasks or list()
+
+    def __repr__(self):
+        return "Operation [{}](id={},status={})".format(
+            self.__class__.__name__, self.uuid, self.status
+        )
+
+    def _set_status(self, status):
+        """ update operation status
+
+        :param str status: New status
+        """
+        logger.info("{}.SetStatus: {}[{}] status update '{}' -> '{}'".format(
+            self.__class__.__name__, self.__class__.path, self.uuid,
+            self.status, status
+        ))
+        return self.set_status(status)
+
+    def set_status(self, status):
+        """ update operation status
+
+        :param str status: New status
+        """
+        self.status = status
+
+    def add_task(self, task):
+        """ add task to operation
+
+        :param kser_operation.task.Task task: task to add
+        """
+        self.tasks.append(task)
+
+    def _prebuild(self, **kwargs):
+        logger.debug("{}.PreBuild: {}[{}]: {}".format(
+            self.__class__.__name__, self.__class__.path, self.uuid, kwargs
+        ))
+        self.check_required_params()
+        return self.prebuild(**kwargs)
+
+    # noinspection PyMethodMayBeStatic
+    def prebuild(self, **kwargs):
+        """ to implement, perform check before the operation creation
+        """
+        return kwargs
+
+    def _prerun(self):
+        """ To execute before running message
+        """
+        self.check_required_params()
+        self._set_status("RUNNING")
+        logger.debug("{}.PreRun: {}[{}]: running...".format(
+            self.__class__.__name__, self.__class__.path, self.uuid
+        ))
+        return self.prerun()
+
+    def _onsuccess(self, result):
+        """ To execute on execution success
+        :param cdumay_result.Result result: Execution result
+        :return: Execution result
+        :rtype: cdumay_result.Result
+        """
+        self._set_status("SUCCESS")
+        logger.info("{}.Success: {}[{}]: {}".format(
+            self.__class__.__name__, self.__class__.path, self.uuid, result
+        ))
+        return self.onsuccess(result)
+
+    def _onerror(self, result):
+        """ To execute on execution failure
+
+        :param cdumay_result.Result result: Execution result
+        :return: Execution result
+        :rtype: cdumay_result.Result
+        """
+        self._set_status("FAILED")
+        logger.error("{}.Failed: {}[{}]: {}".format(
+            self.__class__.__name__, self.__class__.path, self.uuid, result
+        ), extra=result.retval)
+        return self.onerror(result)
+
+    def unsafe_execute(self, result=None):
+        self._prerun()
+        for task in self.tasks:
+            result = task.unsafe_execute(result=result)
+            if result.retcode != 0:
+                return self._onerror(result)
+
+        return self._onsuccess(result=result)
+
+    def display(self):
+        """ dump operation
+
+        """
+        print("{}".format(self))
+        for task in self.tasks:
+            print("  - {}".format(task))
+
+    def next(self, task):
+        for idx, otask in enumerate(self.tasks[:-1]):
+            if otask.uuid == task.uuid:
+                return self.tasks[idx + 1]
+
+    def launch_next(self, task=None, result=None):
+        """ Launch next task or finish operation
+
+        :param kser_operation.task.Task task: previous task
+        :param cdumay_result.Result result: previous task result
+
+        :return: Execution result
+        :rtype: cdumay_result.Result
+        """
+        if task:
+            next_task = self.next(task)
+            if next_task:
+                return next_task.send(result=result)
+            else:
+                return self.set_status(task.status)
+        elif len(self.tasks) > 0:
+            return self.tasks[0].send(result=result)
+        else:
+            return Result(retcode=1, stderr="Nothing to do, empty operation !")
+
+    def launch(self):
+        """ Send the first task
+
+        :return: Execution result
+        :rtype: cdumay_result.Result
+        """
+        return self.launch_next()
+
+    def finalize(self):
+        """To implement, post build actions (database mapping ect...)
+
+        :return: the controller
+        :rtype: kser_operation.operation.Operation
+        """
+        return self
+
+    def _build_tasks(self, **kwargs):
+        """
+
+        :param dict kwargs: tasks parameters (~=context)
+        :return: list of tasks
+        :rtype: list(kser_operation.operation.Operation)
+        """
+        tasks = self.build_tasks(**kwargs)
+        logger.debug("{}.BuildTasks: {} task(s) found".format(
+            self.__class__.__name__, len(tasks)
+        ))
+        return tasks
+
+    # noinspection PyMethodMayBeStatic
+    # noinspection PyUnusedLocal
+    def build_tasks(self, **kwargs):
+        """ to implement
+
+        :param dict kwargs: tasks parameters (~=context)
+        :return: list of tasks
+        :rtype: list(kser_operation.operation.Operation)
+        """
+        return list()
+
+    def compute_tasks(self, **kwargs):
+        """ perfrom checks and build tasks
+
+        :return: list of tasks
+        :rtype: list(kser_operation.operation.Operation)
+        """
+        params = self._prebuild(**kwargs)
+        if not params:
+            params = dict(kwargs)
+
+        return self._build_tasks(**params)
+
+    def build(self, **kwargs):
+        """ create the operation and associate tasks
+
+        :param dict kwargs: operation data
+        :return: the controller
+        :rtype: kser_operation.controller.OperationController
+        """
+        self.tasks += self.compute_tasks(**kwargs)
+        return self.finalize()
+
+    def send(self):
+        """ Send operation to Kafka
+
+        :return: The operation
+        :rtype: kser_operation.operation.Operation
+        """
