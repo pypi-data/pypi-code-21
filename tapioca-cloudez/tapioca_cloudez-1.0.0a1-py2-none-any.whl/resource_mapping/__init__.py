@@ -1,0 +1,10 @@
+# -*- coding: utf-8 -*-
+
+from .database import DATABASE_MAPPING
+from .migration import MIGRATION_MAPPING
+from .website import WEBSITE_MAPPING
+
+RESOURCE_MAPPING = {}
+RESOURCE_MAPPING.update(DATABASE_MAPPING)
+RESOURCE_MAPPING.update(MIGRATION_MAPPING)
+RESOURCE_MAPPING.update(WEBSITE_MAPPING)
