@@ -1,0 +1,16 @@
+#!/usr/bin/python
+# -*- coding: utf-8 -*-
+
+import struct
+
+
+DEFAULT_PORT = 8587
+DEFAULT_HOST = 'localhost'
+WATCHDOG_STARTSTOP_TIMEOUT = 0
+WATCHDOG_CALL_TIMEOUT = 0.3
+MULTICOLUMN_NAME = 'allfiles.out'
+PICKLE_MAGIC_NUMBER = 0xdeadbeef
+PICKLE_HEADER_STRUCT = 'QQ'
+PICKLE_HEADER_SIZE = struct.calcsize(PICKLE_HEADER_STRUCT)
+MAX_THREADS = 50
+DEFAULT_THREADS = 3
