@@ -1,0 +1,742 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
+# from __future__ import absolute_import
+# from __future__ import division
+# from __future__ import print_function
+# from __future__ import unicode_literals
+
+import os
+import pytest
+from functools import partial
+import numpy as np
+from numpy.testing import assert_equal, assert_allclose
+from astropy.tests.helper import assert_quantity_allclose, remote_data
+from astropy import units as apu
+from astropy.units import Quantity
+from ... import conversions as cnv
+from ... import pathprof
+from ...utils import check_astro_quantities
+from astropy.utils.data import get_pkg_data_filename
+from astropy.utils.misc import NumpyRNGContext
+import json
+from itertools import product
+import importlib
+
+
+TOL_KWARGS = {'atol': 1.e-4, 'rtol': 1.e-4}
+
+
+# skip over h5py related tests, if not package present:
+skip_h5py = pytest.mark.skipif(
+    importlib.util.find_spec('h5py') is None,
+    reason='"h5py" package not installed'
+    )
+
+
+MAP_KEYS = [
+    'lon_mid_map', 'lat_mid_map',
+    'dist_map', 'd_ct_map', 'd_cr_map', 'd_lm_map', 'd_tm_map',
+    'zone_t_map', 'zone_r_map', 'bearing_map', 'back_bearing_map',
+    'N0_map', 'delta_N_map', 'beta0_map', 'path_idx_map',
+    'pix_dist_map', 'dist_end_idx_map', 'omega_map'
+    ]
+
+
+@remote_data(source='any')
+@pytest.mark.usefixtures('srtm_handler')
+class TestPropagation:
+
+    def setup(self):
+
+        # TODO: add further test cases
+
+        self.lon_t, self.lat_t = 6.5 * apu.deg, 50.5 * apu.deg
+        self.lon_r, self.lat_r = 6.6 * apu.deg, 50.75 * apu.deg
+        self.hprof_step = 100 * apu.m
+
+        self.omega = 0. * apu.percent
+        self.temperature = (273.15 + 15.) * apu.K  # as in Excel sheet
+        self.pressure = 1013. * apu.hPa
+
+        self.cases = list(
+            # freq, (h_tg, h_rg), time_percent, version, (G_t, G_r)
+            product(
+                [0.1, 1., 10.],
+                [(50, 50), (200, 200)],
+                [2, 10, 50],
+                [14, 16],
+                [(0, 0), (20, 30)],
+            ))
+
+        self.fast_cases = list(
+            # freq, (h_tg, h_rg), time_percent, version, (G_t, G_r)
+            product(
+                [0.1, 1., 10.],
+                [(50, 50), (200, 200)],
+                [2, 10, 50],
+                [14, 16],
+                [(0, 0)],
+            ))
+
+        self.pprop_template = (
+            'cases/pprop_{:.2f}ghz_{:.2f}m_{:.2f}m_{:.2f}percent_v{:d}.json'
+            )
+        self.loss_template = (
+            'cases/loss_{:.2f}ghz_{:.2f}m_{:.2f}m_{:.2f}percent_'
+            '{:.2f}db_{:.2f}db_v{:d}.json'
+            )
+        self.fastmap_template = (
+            'fastmap/attens_{:.2f}ghz_{:.2f}m_{:.2f}m_{:.2f}percent_v{:d}.{}'
+            )
+        self.pprops = []
+        for case in self.cases:
+
+            freq, (h_tg, h_rg), time_percent, version, (G_t, G_r) = case
+            pprop = pathprof.PathProp(
+                freq * apu.GHz,
+                self.temperature, self.pressure,
+                self.lon_t, self.lat_t,
+                self.lon_r, self.lat_r,
+                h_tg * apu.m, h_rg * apu.m,
+                self.hprof_step,
+                time_percent * apu.percent,
+                version=version,
+                )
+
+            self.pprops.append(pprop)
+
+            # Warning: if uncommenting, the test cases will be overwritten
+            # do this only, if you need to update the json files
+            # (make sure, that results are correct!)
+            # pprop_name = self.pprop_template.format(
+            #     freq, h_tg, h_rg, time_percent, version
+            #     )
+            # json.dump(pprop._pp, open(pprop_name, 'w'))
+
+            los_loss = pathprof.loss_freespace(pprop)
+            trop_loss = pathprof.loss_troposcatter(
+                pprop, G_t * cnv.dB, G_r * cnv.dB,
+                )
+            duct_loss = pathprof.loss_ducting(pprop)
+            diff_loss = pathprof.loss_diffraction(pprop)
+
+            tot_loss = pathprof.loss_complete(
+                pprop, G_t * cnv.dB, G_r * cnv.dB,
+                )
+
+            losses = {}
+            losses['L_bfsg'] = los_loss[0].to(cnv.dB).value
+            losses['E_sp'] = los_loss[1].to(cnv.dB).value
+            losses['E_sbeta'] = los_loss[2].to(cnv.dB).value
+
+            losses['L_bs'] = trop_loss.to(cnv.dB).value
+            losses['L_ba'] = duct_loss.to(cnv.dB).value
+
+            losses['L_d_50'] = diff_loss[0].to(cnv.dB).value
+            losses['L_dp'] = diff_loss[1].to(cnv.dB).value
+            losses['L_bd_50'] = diff_loss[2].to(cnv.dB).value
+            losses['L_bd'] = diff_loss[3].to(cnv.dB).value
+            losses['L_min_b0p'] = diff_loss[4].to(cnv.dB).value
+
+            losses['L_bfsg_t'] = tot_loss[0].to(cnv.dB).value
+            losses['L_bd_t'] = tot_loss[1].to(cnv.dB).value
+            losses['L_bs_t'] = tot_loss[2].to(cnv.dB).value
+            losses['L_ba_t'] = tot_loss[3].to(cnv.dB).value
+            losses['L_b_t'] = tot_loss[4].to(cnv.dB).value
+            losses['L_b_corr_t'] = tot_loss[5].to(cnv.dB).value
+            losses['L_t'] = tot_loss[6].to(cnv.dB).value
+
+            # Warning: if uncommenting, the test cases will be overwritten
+            # do this only, if you need to update the json files
+            # (make sure, that results are correct!)
+            # loss_name = self.loss_template.format(
+            #     freq, h_tg, h_rg, time_percent, version, G_t, G_r
+            #     )
+            # json.dump(losses, open(loss_name, 'w'))
+
+    def teardown(self):
+
+        pass
+
+    def test_pathprop(self):
+
+        for freq, (h_tg, h_rg), time_percent, version, _ in self.cases:
+
+            pprop = pathprof.PathProp(
+                freq * apu.GHz,
+                self.temperature, self.pressure,
+                self.lon_t, self.lat_t,
+                self.lon_r, self.lat_r,
+                h_tg * apu.m, h_rg * apu.m,
+                self.hprof_step,
+                time_percent * apu.percent,
+                version=version,
+                )
+
+            pprop_name = get_pkg_data_filename(
+                self.pprop_template.format(
+                    freq, h_tg, h_rg, time_percent, version
+                    ))
+            with open(pprop_name, 'r') as f:
+                pprop_true = json.load(f)
+
+            for k in pprop._pp:
+                assert_quantity_allclose(pprop._pp[k], pprop_true[k])
+
+    def test_freespace_loss(self):
+
+        for case, pprop in zip(self.cases, self.pprops):
+
+            freq, (h_tg, h_rg), time_percent, version, (G_t, G_r) = case
+            los_loss = pathprof.loss_freespace(pprop)
+            losses = {}
+            losses['L_bfsg'] = los_loss[0].to(cnv.dB).value
+            losses['E_sp'] = los_loss[1].to(cnv.dB).value
+            losses['E_sbeta'] = los_loss[2].to(cnv.dB).value
+
+            loss_name = get_pkg_data_filename(
+                self.loss_template.format(
+                    freq, h_tg, h_rg, time_percent, version, G_t, G_r
+                    ))
+            with open(loss_name, 'r') as f:
+                loss_true = json.load(f)
+
+            for k in losses:
+                assert_quantity_allclose(losses[k], loss_true[k])
+
+    def test_troposcatter_loss(self):
+
+        for case, pprop in zip(self.cases, self.pprops):
+
+            freq, (h_tg, h_rg), time_percent, version, (G_t, G_r) = case
+            tropo_loss = pathprof.loss_troposcatter(
+                pprop, G_t * cnv.dB, G_r * cnv.dB
+                )
+            losses = {}
+            losses['L_bs'] = tropo_loss.to(cnv.dB).value
+
+            loss_name = get_pkg_data_filename(
+                self.loss_template.format(
+                    freq, h_tg, h_rg, time_percent, version, G_t, G_r
+                ))
+            with open(loss_name, 'r') as f:
+                loss_true = json.load(f)
+
+            for k in losses:
+                assert_quantity_allclose(losses[k], loss_true[k])
+
+    def test_ducting_loss(self):
+
+        for case, pprop in zip(self.cases, self.pprops):
+
+            freq, (h_tg, h_rg), time_percent, version, (G_t, G_r) = case
+            duct_loss = pathprof.loss_ducting(pprop)
+            losses = {}
+            losses['L_ba'] = duct_loss.to(cnv.dB).value
+
+            loss_name = get_pkg_data_filename(
+                self.loss_template.format(
+                    freq, h_tg, h_rg, time_percent, version, G_t, G_r
+                ))
+            with open(loss_name, 'r') as f:
+                loss_true = json.load(f)
+
+            for k in losses:
+                assert_quantity_allclose(losses[k], loss_true[k])
+
+    def test_diffraction_loss(self):
+
+        for case, pprop in zip(self.cases, self.pprops):
+
+            freq, (h_tg, h_rg), time_percent, version, (G_t, G_r) = case
+            diff_loss = pathprof.loss_diffraction(pprop)
+            losses = {}
+            losses['L_d_50'] = diff_loss[0].to(cnv.dB).value
+            losses['L_dp'] = diff_loss[1].to(cnv.dB).value
+            losses['L_bd_50'] = diff_loss[2].to(cnv.dB).value
+            losses['L_bd'] = diff_loss[3].to(cnv.dB).value
+            losses['L_min_b0p'] = diff_loss[4].to(cnv.dB).value
+
+            loss_name = get_pkg_data_filename(
+                self.loss_template.format(
+                    freq, h_tg, h_rg, time_percent, version, G_t, G_r
+                ))
+            with open(loss_name, 'r') as f:
+                loss_true = json.load(f)
+
+            for k in losses:
+                assert_quantity_allclose(losses[k], loss_true[k])
+
+    def test_complete_loss(self):
+
+        for case, pprop in zip(self.cases, self.pprops):
+
+            freq, (h_tg, h_rg), time_percent, version, (G_t, G_r) = case
+            tot_loss = pathprof.loss_complete(
+                pprop, G_t * cnv.dB, G_r * cnv.dB
+                )
+            losses = {}
+            losses['L_bfsg_t'] = tot_loss[0].to(cnv.dB).value
+            losses['L_bd_t'] = tot_loss[1].to(cnv.dB).value
+            losses['L_bs_t'] = tot_loss[2].to(cnv.dB).value
+            losses['L_ba_t'] = tot_loss[3].to(cnv.dB).value
+            losses['L_b_t'] = tot_loss[4].to(cnv.dB).value
+            losses['L_b_corr_t'] = tot_loss[5].to(cnv.dB).value
+            losses['L_t'] = tot_loss[6].to(cnv.dB).value
+
+            loss_name = get_pkg_data_filename(
+                self.loss_template.format(
+                    freq, h_tg, h_rg, time_percent, version, G_t, G_r
+                ))
+            with open(loss_name, 'r') as f:
+                loss_true = json.load(f)
+
+            for k in losses:
+                assert_quantity_allclose(losses[k], loss_true[k])
+
+    @skip_h5py
+    def test_height_map_data_h5py(self, tmpdir_factory):
+
+        import h5py
+
+        hprof_data_cache = pathprof.height_map_data(
+            6.5 * apu.deg, 50.5 * apu.deg,
+            900 * apu.arcsec, 900 * apu.arcsec,
+            map_resolution=30 * apu.arcsec,
+            )
+
+        # also testing reading/writing from hdf5
+        tdir = tmpdir_factory.mktemp('hdata')
+        tfile = str(tdir.join('hprof.hdf5'))
+        print('writing temporary files to', tdir)
+
+        # saving
+        with h5py.File(tfile, 'w') as h5f:
+            for k, v in hprof_data_cache.items():
+                h5f[k] = v
+
+        hprof_data_cache_disk = h5py.File(tfile, 'r')
+
+        for k in hprof_data_cache:
+            assert_quantity_allclose(
+                # Note conversion to some ndarray type necessary, as h5py
+                # returns <HDF5 dataset> types
+                np.squeeze(hprof_data_cache[k]),
+                np.squeeze(hprof_data_cache_disk[k])
+                )
+
+        # also test versus true results
+        tfile = get_pkg_data_filename('fastmap/hprof.hdf5')
+        hprof_data_cache_true = h5py.File(tfile, 'r')
+
+        for k in hprof_data_cache:
+            # Note conversion to some ndarray type necessary, as h5py
+            # returns <HDF5 dataset> types
+            q1 = np.squeeze(hprof_data_cache[k])
+            q2 = np.squeeze(hprof_data_cache_true[k])
+
+            # we'll skip over the map center, as the path_idx is quasi-random
+            # (all paths have a point in the center...)
+            if k in MAP_KEYS:
+                q1[15, 15] = q2[15, 15]
+
+            if issubclass(q1.dtype.type, np.integer):
+                assert_equal(q1, q2)
+            else:
+                assert_quantity_allclose(q1, q2, atol=1.e-6)
+
+    @skip_h5py
+    def test_fast_atten_map_h5py(self, tmpdir_factory):
+
+        import h5py
+
+        tfile = get_pkg_data_filename('fastmap/hprof.hdf5')
+        hprof_data_cache = h5py.File(tfile, 'r')
+        # tdir = tmpdir_factory.mktemp('fastmap')
+
+        for case in self.fast_cases:
+
+            freq, (h_tg, h_rg), time_percent, version, (G_t, G_r) = case
+
+            results = pathprof.atten_map_fast(
+                freq * apu.GHz,
+                self.temperature,
+                self.pressure,
+                h_tg * apu.m, h_rg * apu.m,
+                time_percent * apu.percent,
+                hprof_data_cache,  # dict_like
+                version=version,
+                )
+            for k in results:
+                try:
+                    results[k] = results[k].value
+                except AttributeError:
+                    pass
+
+            fname = self.fastmap_template.format(
+                freq, h_tg, h_rg, time_percent, version, 'hdf5'
+                )
+            tfile = get_pkg_data_filename(fname)  # comment out if not exists
+
+            # Warning: if uncommenting, the test cases will be overwritten
+            # do this only, if you need to update the h5py files
+            # (make sure, that results are correct!)
+            # tfile = str(tdir.join(fname.replace('fastmap/', '')))
+            # print('writing temporary files to', tdir)
+            # with h5py.File(tfile, 'w') as h5f:
+            #     for k, v in results.items():
+            #         h5f[k] = v
+
+            print(tfile)
+            h5f = h5py.File(tfile, 'r')
+
+            # Note conversion to some ndarray type necessary, as h5py
+            # returns <HDF5 dataset> types
+            tol_kwargs = {'atol': 1.e-6, 'rtol': 1.e-6}
+            # for some super-strange reason, index 9, 13 is completely off
+            # on travis and appveyor (only diffraction)
+            # as it is only one pixel, we ignore it here for now
+            for k, v in results.items():
+                v2 = np.squeeze(h5f[k])
+                v2[9, 13] = v[9, 13]
+                assert_allclose(v, v2, **tol_kwargs)
+
+            # idx = np.where(np.abs(h5_atten_map - atten_map) > 1.e-6)
+            # for i, y, x in zip(*idx):
+            #     print(i, y, x, h5_atten_map[i, y, x], atten_map[i, y, x])
+
+    def test_height_map_data_npz(self, tmpdir_factory):
+
+        hprof_data_cache = pathprof.height_map_data(
+            6.5 * apu.deg, 50.5 * apu.deg,
+            900 * apu.arcsec, 900 * apu.arcsec,
+            map_resolution=30 * apu.arcsec,
+            )
+
+        # also testing reading/writing from hdf5
+        tdir = tmpdir_factory.mktemp('hdata')
+        tfile = str(tdir.join('hprof.npz'))
+        print('writing temporary files to', tdir)
+
+        # saving
+        np.savez(tfile, **hprof_data_cache)
+
+        hprof_data_cache_disk = np.load(tfile)
+
+        for k in hprof_data_cache:
+            assert_quantity_allclose(
+                np.squeeze(hprof_data_cache[k]),
+                np.squeeze(hprof_data_cache_disk[k])
+                )
+
+        # also test versus true results
+        tfile = get_pkg_data_filename('fastmap/hprof.npz')
+        hprof_data_cache_true = np.load(tfile)
+
+        for k in hprof_data_cache:
+            q1 = np.squeeze(hprof_data_cache[k])
+            q2 = np.squeeze(hprof_data_cache_true[k])
+
+            # print(k)
+            # if k == 'path_idx_map':
+            #     idx = np.where(np.abs(q1 - q2) > 1.e-6)
+            #     for y, x in zip(*idx):
+            #         print(y, x, q1[y, x], q2[y, x])
+
+            # we'll skip over the map center, as the path_idx is quasi-random
+            # (all paths have a point in the center...)
+            if k in MAP_KEYS:
+                q1[15, 15] = q2[15, 15]
+
+            if issubclass(q1.dtype.type, np.integer):
+                assert_equal(q1, q2)
+            else:
+                assert_quantity_allclose(q1, q2, atol=1.e-6)
+
+    def test_fast_atten_map_npz(self, tmpdir_factory):
+
+        tfile = get_pkg_data_filename('fastmap/hprof.npz')
+        hprof_data_cache = np.load(tfile)
+        # tdir = tmpdir_factory.mktemp('fastmap')
+
+        for case in self.fast_cases:
+
+            freq, (h_tg, h_rg), time_percent, version, (G_t, G_r) = case
+
+            results = pathprof.atten_map_fast(
+                freq * apu.GHz,
+                self.temperature,
+                self.pressure,
+                h_tg * apu.m, h_rg * apu.m,
+                time_percent * apu.percent,
+                hprof_data_cache,  # dict_like
+                version=version,
+                )
+
+            for k in results:
+                try:
+                    results[k] = results[k].value
+                except AttributeError:
+                    pass
+
+            fname = self.fastmap_template.format(
+                freq, h_tg, h_rg, time_percent, version, 'npz'
+                )
+            tfile = get_pkg_data_filename(fname)  # comment out if not exists
+
+            # Warning: if uncommenting, the test cases will be overwritten
+            # do this only, if you need to update the npz files
+            # (make sure, that results are correct!)
+            # tfile = str(tdir.join(fname.replace('fastmap/', '')))
+            # np.savez(tfile, **results)
+
+            print(tfile)
+            true_dat = np.load(tfile)
+
+            # Note conversion to some ndarray type necessary, as h5py
+            # returns <HDF5 dataset> types
+            tol_kwargs = {'atol': 1.e-6, 'rtol': 1.e-6}
+            # for some super-strange reason, index 9, 13 is completely off
+            # on travis and appveyor (only diffraction)
+            # as it is only one pixel, we ignore it here for now
+
+            # idx = np.where(np.abs(t_atten_map - atten_map) > 1.e-6)
+            # for i, y, x in zip(*idx):
+            #     print(i, y, x, t_atten_map[i, y, x], atten_map[i, y, x])
+
+            for k, v in results.items():
+                v2 = np.squeeze(true_dat[k])
+                v2[9, 13] = v[9, 13]
+                assert_allclose(v, v2, **tol_kwargs)
+
+    def test_atten_path_fast(self):
+
+        # testing against the slow approach
+
+        lon_t, lat_t = 6.8836 * apu.deg, 50.525 * apu.deg
+        lon_r, lat_r = 7.3334 * apu.deg, 50.635 * apu.deg
+        hprof_step = 100 * apu.m
+
+        freq = 1. * apu.GHz
+        temperature = 290. * apu.K
+        pressure = 1013. * apu.hPa
+        h_tg, h_rg = 5. * apu.m, 50. * apu.m
+        time_percent = 2. * apu.percent
+
+        zone_t, zone_r = pathprof.CLUTTER.URBAN, pathprof.CLUTTER.SUBURBAN
+
+        hprof_data = pathprof.height_path_data(
+            lon_t, lat_t, lon_r, lat_r, hprof_step,
+            zone_t=zone_t, zone_r=zone_r,
+            )
+
+        results = pathprof.atten_path_fast(
+            freq, temperature, pressure,
+            h_tg, h_rg, time_percent,
+            hprof_data,
+            )
+
+        (
+            lons, lats, distance, distances, heights,
+            bearing, back_bearing, back_bearings
+            ) = pathprof.srtm_height_profile(
+                lon_t, lat_t, lon_r, lat_r, hprof_step
+                )
+
+        atten_path = np.zeros((6, len(distances)), dtype=np.float64)
+        eps_pt_path = np.zeros((len(distances)), dtype=np.float64)
+        eps_pr_path = np.zeros((len(distances)), dtype=np.float64)
+        d_lt_path = np.zeros((len(distances)), dtype=np.float64)
+        d_lr_path = np.zeros((len(distances)), dtype=np.float64)
+
+        for idx in range(6, len(distances)):
+
+            pprop = pathprof.PathProp(
+                freq,
+                temperature, pressure,
+                lon_t, lat_t,
+                lons[idx], lats[idx],
+                h_tg, h_rg,
+                hprof_step,
+                time_percent,
+                zone_t=zone_t, zone_r=zone_r,
+                hprof_dists=distances[:idx + 1],
+                hprof_heights=heights[:idx + 1],
+                hprof_bearing=bearing,
+                hprof_backbearing=back_bearings[idx],
+                # delta_N=hprof_data['delta_N'][idx] * cnv.dimless / apu.km,
+                # N0=hprof_data['N0'][idx] * cnv.dimless,
+                )
+
+            eps_pt_path[idx] = pprop.eps_pt.value
+            eps_pr_path[idx] = pprop.eps_pr.value
+            d_lt_path[idx] = pprop.d_lt.value
+            d_lr_path[idx] = pprop.d_lr.value
+            tot_loss = pathprof.loss_complete(pprop)
+            atten_path[:, idx] = apu.Quantity(tot_loss).value[:-1]
+
+        assert np.allclose(atten_path[0], results['L_bfsg'].value, atol=1.e-3)
+        assert np.allclose(atten_path[1], results['L_bd'].value, atol=1.e-3)
+        assert np.allclose(atten_path[2], results['L_bs'].value, atol=1.e-3)
+        assert np.allclose(atten_path[3], results['L_ba'].value, atol=1.e-3)
+        assert np.allclose(atten_path[4], results['L_b'].value, atol=1.e-3)
+        assert np.allclose(atten_path[5], results['L_b_corr'].value, atol=1.e-3)
+
+        assert np.allclose(eps_pt_path, results['eps_pt'].value, atol=1.e-6)
+        assert np.allclose(eps_pr_path, results['eps_pr'].value, atol=1.e-6)
+
+        assert np.allclose(d_lt_path, results['d_lt'].value, atol=1.e-6)
+        assert np.allclose(d_lr_path, results['d_lr'].value, atol=1.e-6)
+
+    def test_atten_path_fast_generic(self):
+
+        # testing against the slow approach
+
+        hprof_step = 100 * apu.m
+        lon_mid, lat_mid = 6 * apu.deg, 50 * apu.deg
+        lon_t = lon_mid - 0.5 * apu.deg
+        lon_r = lon_mid + 0.5 * apu.deg
+
+        freq = 1. * apu.GHz
+        temperature = 290. * apu.K
+        pressure = 1013. * apu.hPa
+        h_tg, h_rg = 5. * apu.m, 50. * apu.m
+        time_percent = 2. * apu.percent
+
+        (
+            lons, lats, distance, distances, heights,
+            bearing, back_bearing, back_bearings
+            ) = pathprof.srtm_height_profile(
+                lon_t, lat_mid, lon_r, lat_mid, hprof_step
+                )
+
+        zone_t, zone_r = pathprof.CLUTTER.URBAN, pathprof.CLUTTER.SUBURBAN
+
+        hprof_data = pathprof.height_path_data_generic(
+            distance, hprof_step, lon_mid, lat_mid,
+            zone_t=zone_t, zone_r=zone_r,
+            )
+
+        results = pathprof.atten_path_fast(
+            freq, temperature, pressure,
+            h_tg, h_rg, time_percent,
+            hprof_data,
+            )
+
+        atten_path = np.zeros((6, len(distances)), dtype=np.float64)
+        eps_pt_path = np.zeros((len(distances)), dtype=np.float64)
+        eps_pr_path = np.zeros((len(distances)), dtype=np.float64)
+        d_lt_path = np.zeros((len(distances)), dtype=np.float64)
+        d_lr_path = np.zeros((len(distances)), dtype=np.float64)
+
+        for idx in range(6, len(distances)):
+
+            pprop = pathprof.PathProp(
+                freq,
+                temperature, pressure,
+                lon_t, lat_mid,
+                lons[idx], lats[idx],
+                h_tg, h_rg,
+                hprof_step,
+                time_percent,
+                zone_t=zone_t, zone_r=zone_r,
+                hprof_dists=distances[:idx + 1],
+                hprof_heights=0 * heights[:idx + 1],
+                hprof_bearing=bearing,
+                hprof_backbearing=back_bearings[idx],
+                delta_N=hprof_data['delta_N'][idx] * cnv.dimless / apu.km,
+                N0=hprof_data['N0'][idx] * cnv.dimless,
+                )
+
+            eps_pt_path[idx] = pprop.eps_pt.value
+            eps_pr_path[idx] = pprop.eps_pr.value
+            d_lt_path[idx] = pprop.d_lt.value
+            d_lr_path[idx] = pprop.d_lr.value
+            tot_loss = pathprof.loss_complete(pprop)
+            atten_path[:, idx] = apu.Quantity(tot_loss).value[:-1]
+
+        assert np.allclose(atten_path[0], results['L_bfsg'].value, atol=1.e-3)
+        assert np.allclose(atten_path[1], results['L_bd'].value, atol=1.e-3)
+        assert np.allclose(atten_path[2], results['L_bs'].value, atol=1.e-3)
+        assert np.allclose(atten_path[3], results['L_ba'].value, atol=1.e-3)
+        assert np.allclose(atten_path[4], results['L_b'].value, atol=1.e-3)
+        assert np.allclose(atten_path[5], results['L_b_corr'].value, atol=1.e-3)
+
+        assert np.allclose(eps_pt_path, results['eps_pt'].value, atol=1.e-6)
+        assert np.allclose(eps_pr_path, results['eps_pr'].value, atol=1.e-6)
+
+        assert np.allclose(d_lt_path, results['d_lt'].value, atol=1.e-6)
+        assert np.allclose(d_lr_path, results['d_lr'].value, atol=1.e-6)
+
+
+def test_clutter_correction():
+
+    # args_list = [
+    #     (None, None, apu.m),
+    #     (None, None, apu.GHz),
+    #     ]
+
+    # check_astro_quantities(pathprof.clutter_correction, args_list)
+
+    CL = pathprof.CLUTTER
+
+    cases = [
+        (CL.UNKNOWN, 5 * apu.m, 1 * apu.GHz, 0.0 * cnv.dB),
+        (CL.SPARSE, 2 * apu.m, 0.5 * apu.GHz, 9.148328469292968 * cnv.dB),
+        (CL.VILLAGE, 5 * apu.m, 1 * apu.GHz, -0.12008183792955418 * cnv.dB),
+        (CL.SUBURBAN, 5 * apu.m, 10 * apu.GHz, 13.606900992918096 * cnv.dB),
+        (CL.DENSE_URBAN, 10 * apu.m, 10 * apu.GHz, 18.4986816015433 * cnv.dB),
+        (CL.INDUSTRIAL_ZONE, 50 * apu.m, 2 * apu.GHz, -0.32999999670 * cnv.dB),
+        ]
+
+    for zone, h_g, freq, loss in cases:
+
+        assert_quantity_allclose(
+            pathprof.clutter_correction(h_g, zone, freq),
+            loss,
+            )
+
+
+def test_clutter_imt():
+
+    args_list = [
+        (2, 67, apu.GHz),
+        (0.25, None, apu.km),
+        (0, 100, apu.percent),
+        ]
+
+    check_astro_quantities(pathprof.clutter_imt, args_list)
+
+    freq = [2.5, 10, 20] * apu.GHz
+    dist = np.logspace(2.5, 4, 4)[:, np.newaxis] * apu.m
+
+    assert_quantity_allclose(
+        pathprof.clutter_imt(freq, dist, 2 * apu.percent, num_end_points=1),
+        [
+            [9.70031407, 11.67179752, 12.59465169],
+            [14.90452998, 20.26362512, 22.56060172],
+            [14.99471557, 20.77252115, 23.65890113],
+            [14.99509074, 20.77485862, 23.66473226]
+            ] * cnv.dB,
+        )
+
+    assert_quantity_allclose(
+        pathprof.clutter_imt(freq, dist, 50 * apu.percent, num_end_points=2),
+        [
+            [44.05089174, 47.99385864, 49.83956699],
+            [54.45932356, 65.17751385, 69.77146704],
+            [54.63969475, 66.19530591, 71.96806586],
+            [54.64044508, 66.19998085, 71.97972813]
+            ] * cnv.dB,
+        )
+
+    assert_quantity_allclose(
+        pathprof.clutter_imt(freq, dist, 90 * apu.percent, num_end_points=1),
+        [
+            [29.71581878, 31.68730223, 32.61015641],
+            [34.92003469, 40.27912984, 42.57610643],
+            [35.01022029, 40.78802587, 43.67440584],
+            [35.01059545, 40.79036334, 43.68023698]
+            ] * cnv.dB,
+        )
