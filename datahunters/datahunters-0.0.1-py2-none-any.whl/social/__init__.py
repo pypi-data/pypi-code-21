@@ -1,0 +1,1 @@
+from datahunters.social import instagram
