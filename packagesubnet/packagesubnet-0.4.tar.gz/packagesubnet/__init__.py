@@ -1,0 +1,5 @@
+from packagesubnet import my_subnet_librairy
+from my_subnet_librairy import get_nb_host
+from my_subnet_librairy import get_size_netmask
+from my_subnet_librairy import get_wildcard_mask
+from my_subnet_librairy import generate_random_ip_address_from_subnet
