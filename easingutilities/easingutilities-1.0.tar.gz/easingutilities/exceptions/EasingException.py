@@ -1,0 +1,2 @@
+class EasingException(Exception):
+    pass
