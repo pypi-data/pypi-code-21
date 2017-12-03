@@ -1,0 +1,2 @@
+class MinificationError(Exception):
+    pass
