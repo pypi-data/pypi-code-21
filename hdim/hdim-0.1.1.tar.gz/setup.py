@@ -1,0 +1,60 @@
+from setuptools import setup, Extension
+from setuptools.command.install import install
+import glob
+import os
+from pathlib import Path
+from textwrap import dedent
+
+def file_search( directory, extension = None ):
+
+    found_headers = []
+
+    if( extension == None ):
+        for path, subdirs, files in os.walk( directory ):
+            for name in files:
+                found_headers.append( os.path.join( path , name ) )
+
+    else:
+        for path, subdirs, files in os.walk( directory ):
+            for name in files:
+                if name.endswith( extension ):
+                    found_headers.append( os.path.join( path , name ) )
+
+    return found_headers
+
+source_files = glob.glob( 'hdim/hdim_wrap.cxx' )
+source_files.extend( file_search( "src", '.cpp' ) )
+
+header_files = []
+header_files.extend( file_search( "src", '.hpp' ) )
+
+header_files.extend( file_search( "depends" ) )
+
+print( header_files )
+
+extension = Extension('_hdim',
+	            define_macros = [('NDEBUG',None)],
+	            include_dirs = ['/usr/include/eigen3'],
+	            sources = source_files,
+	            language='c++',
+	            extra_compile_args=['--std=c++11','-O3','-mtune=native','-march=native'])
+
+setup(name="hdim",
+      version="0.1.1",
+      description=("A toolkit for working with high-dimensional data."),
+      url="https://github.com/LedererLab/FOS",
+      author="Benjamin J Phillips",
+      author_email="bejphil@uw.edu",
+      license="MIT",
+      packages=['hdim'],
+      data_files = header_files, # Actually the header files needed to build from source
+      ext_modules=[extension],
+      requires=["NumPy (>= 1.3)"],
+      platforms = ["Linux"],
+    classifiers=[
+    'Programming Language :: Python :: 3',
+    'Programming Language :: C++',
+    'Topic :: Scientific/Engineering :: Mathematics',
+    'Intended Audience :: Science/Research',
+    ],
+      zip_safe=False)
